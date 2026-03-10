@@ -1326,7 +1326,8 @@ export default function App() {
     <>
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:${t.bg};overflow:hidden}
+        html,body{height:100%;overflow:hidden}
+        body{background:${t.bg};overflow:hidden;-webkit-overflow-scrolling:touch}
         @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
@@ -1339,7 +1340,7 @@ export default function App() {
         ::-webkit-scrollbar-thumb{background:${t.border};border-radius:2px}
       `}</style>
 
-      <div style={{display:'flex',height:'100dvh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden',position:'relative'}}>
+      <div style={{display:'flex',height:'100dvh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'clip',position:'relative'}}>
         {/* Overlay mobile: toca afuera del sidebar para cerrarlo */}
         {isMobile && sidebarOpen && (
           <div onClick={()=>setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:10,backdropFilter:'blur(2px)'}}/>
@@ -1364,7 +1365,7 @@ export default function App() {
           <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t} isMobile={isMobile}/>
         </div>
 
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'clip',minWidth:0,minHeight:0}}>
           {/* HEADER */}
           <div style={{padding: isMobile ? '10px 12px' : '12px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:t.bg,flexShrink:0}}>
             {!isMobile && <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>}
