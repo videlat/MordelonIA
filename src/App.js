@@ -903,6 +903,7 @@ export default function App() {
     const conv={id,title:'Nueva conversación',messages:[],createdAt:Date.now(),updatedAt:Date.now()};
     setConvs(prev=>[conv,...prev]);
     setActiveId(id);
+    setToolExecutions([]);
     return id;
   },[]);
 
@@ -970,10 +971,13 @@ export default function App() {
     for(const f of fls){
       if(isImg(f)){
         const b=await readB64(f);
-        parts.push({type:'image_url',image_url:{url:`data:${getMT(f)};base64,${b}`}});
+        // Formato Anthropic (no OpenAI): {type:"image", source:{type:"base64",...}}
+        parts.push({type:'image',source:{type:'base64',media_type:getMT(f),data:b}});
       } else if(isPdf(f)){
-        // Groq no soporta PDFs nativamente, extraemos como texto descriptivo
-        parts.push({type:'text',text:`[PDF adjunto: ${f.name} - ${(f.size/1024).toFixed(1)}KB. El usuario subió este PDF.]`});
+        // Anthropic soporta PDFs nativos vía document block
+        const b=await readB64(f);
+        parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:b}});
+        parts.push({type:'text',text:`(PDF adjunto: ${f.name} — leé el documento completo y respondé en base a su contenido)`});
       } else if(isCode(f)){
         const tx=await readTxt(f);
         const txTruncated = tx.length > 40000 ? tx.slice(0, 40000) + '\n... [archivo truncado, continúa]' : tx;
@@ -1251,7 +1255,7 @@ export default function App() {
       `}</style>
 
       <div style={{display:'flex',height:'100vh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden'}}>
-        <Sidebar conversations={convs} activeId={activeId} onSelect={setActiveId} onNew={newConv} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t}/>
+        <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);}} onNew={newConv} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t}/>
 
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
           {/* HEADER */}
@@ -1364,7 +1368,7 @@ export default function App() {
         <ToolsPanel executions={toolExecutions} isOpen={toolsPanelOpen} onClose={()=>setToolsPanelOpen(false)} t={t}/>
       </div>
 
-      {modal==='search'&&<SearchModal conversations={convs} onSelect={setActiveId} onClose={()=>setModal(null)} t={t}/>}
+      {modal==='search'&&<SearchModal conversations={convs} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);}} onClose={()=>setModal(null)} t={t}/>}
       {modal==='shortcuts'&&<ShortcutsModal onClose={()=>setModal(null)} t={t}/>}
       {modal==='diff'&&diffData&&<DiffModal original={diffData.o} modified={diffData.n} onClose={()=>setModal(null)} t={t}/>}
       {modal==='memory'&&<MemoryPanel memories={memories} onDelete={handleDeleteMemory} onClose={()=>setModal(null)} t={t}/>}

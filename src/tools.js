@@ -241,64 +241,27 @@ Respondé SOLO con JSON (sin markdown):
 
 // ── 4. BÚSQUEDA WEB ───────────────────────────────────────────────────────────
 const searchWeb = async ({ query, language = 'es' }) => {
-  // 🔌 PARA CONECTAR: agregá REACT_APP_BRAVE_KEY o REACT_APP_SERPER_KEY al .env
-  const braveKey  = process.env.REACT_APP_BRAVE_KEY;
-  const serperKey = process.env.REACT_APP_SERPER_KEY;
-  const tavilyKey = process.env.REACT_APP_TAVILY_KEY;
-
-  // Brave Search
-  if (braveKey) {
-    try {
-      const res = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&search_lang=${language}`, {
-        headers: { 'Accept': 'application/json', 'X-Subscription-Token': braveKey },
-      });
-      const data = await res.json();
-      const results = (data.web?.results || []).slice(0, 5).map(r => ({
-        title: r.title, url: r.url, snippet: r.description,
-      }));
-      return { success: true, provider: 'Brave', query, results };
-    } catch (e) { /* fallthrough */ }
+  // Llama al proxy serverless /api/search — la key de Serper vive en el servidor
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, language, num: 6 }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      // not_configured viene del servidor si falta la key
+      return {
+        success: false,
+        not_configured: data.not_configured || false,
+        query,
+        message: data.message || data.error || `Error ${res.status}`,
+      };
+    }
+    return data; // { success, provider, query, results, answerBox?, knowledgeGraph? }
+  } catch (e) {
+    return { success: false, query, message: `Error de red: ${e.message}` };
   }
-
-  // Serper
-  if (serperKey) {
-    try {
-      const res = await fetch('https://google.serper.dev/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-KEY': serperKey },
-        body: JSON.stringify({ q: query, hl: language, num: 5 }),
-      });
-      const data = await res.json();
-      const results = (data.organic || []).slice(0, 5).map(r => ({
-        title: r.title, url: r.link, snippet: r.snippet,
-      }));
-      return { success: true, provider: 'Serper', query, results };
-    } catch (e) { /* fallthrough */ }
-  }
-
-  // Tavily
-  if (tavilyKey) {
-    try {
-      const res = await fetch('https://api.tavily.com/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: tavilyKey, query, max_results: 5 }),
-      });
-      const data = await res.json();
-      const results = (data.results || []).slice(0, 5).map(r => ({
-        title: r.title, url: r.url, snippet: r.content?.slice(0, 200),
-      }));
-      return { success: true, provider: 'Tavily', query, results };
-    } catch (e) { /* fallthrough */ }
-  }
-
-  // Sin API configurada
-  return {
-    success: false,
-    not_configured: true,
-    query,
-    message: 'Búsqueda web no configurada. Agregá REACT_APP_BRAVE_KEY, REACT_APP_SERPER_KEY o REACT_APP_TAVILY_KEY al .env',
-  };
 };
 
 // ── 5. GENERACIÓN DE IMÁGENES ─────────────────────────────────────────────────
