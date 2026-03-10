@@ -13,16 +13,51 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
+// ─── UTILIDAD: elimina undefined recursivamente ───────────────────────────────
+// Firestore tira 400 si algún campo es undefined. Esto lo previene.
+const stripUndefined = (obj) => {
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)])
+    );
+  }
+  return obj;
+};
+
+// ─── Normaliza el content de un mensaje para Firestore ───────────────────────
+// Soporta: string, array de bloques (vision/multimodal), cualquier otra cosa
+const normalizeContent = (content) => {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    // Filtramos image_url (base64 pesado) y dejamos solo los bloques de texto
+    return content
+      .filter(b => b.type === 'text')
+      .map(b => b.text || '')
+      .join('\n') || JSON.stringify(content);
+  }
+  try { return JSON.stringify(content); } catch { return String(content); }
+};
+
 export const saveConversation = async (conv) => {
   try {
-    const data = {
+    const data = stripUndefined({
       ...conv,
       messages: conv.messages.map(m => ({
-        ...m,
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-        attachments: (m.attachments || []).map(a => ({ name: a.name, type: a.type || '', size: a.size || 0 })),
+        role:      m.role      || 'user',
+        content:   normalizeContent(m.content),
+        timestamp: m.timestamp || Date.now(),
+        // originalCode solo si existe y es string
+        ...(m.originalCode ? { originalCode: m.originalCode.slice(0, 5000) } : {}),
+        attachments: (m.attachments || []).map(a => ({
+          name: a.name  || '',
+          type: a.type  || '',
+          size: a.size  || 0,
+        })),
       })),
-    };
+    });
     await setDoc(doc(db, 'conversations', conv.id), data);
   } catch (e) { console.error('Firebase save error:', e); }
 };
