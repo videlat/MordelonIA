@@ -269,6 +269,11 @@ function Bubble({message, t, onDiff}) {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px',justifyContent:isUser?'flex-end':'flex-start'}}>
           <span style={{fontSize:'10px',color:t.muted,fontFamily:'monospace'}}>{fmtDate(message.timestamp||Date.now())}</span>
+          {!isUser&&message.model&&(
+            <span style={{fontSize:'9px',fontFamily:'monospace',padding:'1px 6px',borderRadius:'4px',border:`1px solid ${t.border}`,color:message.model.includes('sonnet')?'#cc44ff':t.accent,background:message.model.includes('sonnet')?'#1a0a2a':'transparent'}}>
+              {message.model.includes('sonnet')?'✦ Sonnet':'◆ Haiku'}
+            </span>
+          )}
           {!isUser&&codes.length>0&&message.originalCode&&(
             <button onClick={()=>onDiff(message.originalCode,codes[0].content)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,fontSize:'10px',padding:'1px 8px',borderRadius:'4px',cursor:'pointer',fontFamily:'monospace'}}>ver diff</button>
           )}
@@ -1208,7 +1213,7 @@ export default function App() {
       // ── Commit mensaje final ─────────────────────────────────────────────────
       setStreamText(''); setIsThinking(false);
       const replyTxt = finalText || 'Sin respuesta.';
-      const assistantMsg={role:'assistant',content:replyTxt,timestamp:Date.now(),...(origCode?{originalCode:origCode}:{})};
+      const assistantMsg={role:'assistant',content:replyTxt,timestamp:Date.now(),model:chatModel,...(origCode?{originalCode:origCode}:{})};
       updateConv(cid,c=>({...c,messages:[...c.messages,assistantMsg]}));
 
       // ── Extraer memorias en background ───────────────────────────────────────
