@@ -1339,11 +1339,27 @@ export default function App() {
         ::-webkit-scrollbar-thumb{background:${t.border};border-radius:2px}
       `}</style>
 
-      <div style={{display:'flex',height:'100vh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden',position:'relative'}}>
+      <div style={{display:'flex',height:'100dvh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden',position:'relative'}}>
         {/* Overlay mobile: toca afuera del sidebar para cerrarlo */}
         {isMobile && sidebarOpen && (
           <div onClick={()=>setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:10,backdropFilter:'blur(2px)'}}/>
         )}
+
+        {/* Botón flotante para abrir sidebar en mobile cuando está cerrado */}
+        {isMobile && !sidebarOpen && (
+          <button
+            onClick={()=>setSidebarOpen(true)}
+            style={{
+              position:'fixed', top:'50%', left:0, transform:'translateY(-50%)',
+              zIndex:30, background:t.surface, border:`1px solid ${t.border}`,
+              borderLeft:'none', borderRadius:'0 8px 8px 0',
+              color:t.accent, width:'20px', height:'48px',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              cursor:'pointer', fontSize:'10px', padding:0,
+              boxShadow:`2px 0 12px rgba(0,0,0,0.4)`,
+            }}>▶</button>
+        )}
+
         <div style={{position: isMobile ? 'fixed' : 'relative', top:0, left:0, height:'100%', zIndex: isMobile ? 20 : 'auto'}}>
           <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t} isMobile={isMobile}/>
         </div>
@@ -1351,7 +1367,7 @@ export default function App() {
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
           {/* HEADER */}
           <div style={{padding: isMobile ? '10px 12px' : '12px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:t.bg,flexShrink:0}}>
-            <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>
+            {!isMobile && <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>}
             <div style={{fontSize: isMobile ? '22px' : '28px',animation:'flamePulse 2s infinite'}}>🔥</div>
             <div style={{flex:1,minWidth:0}}>
               <h1 style={{color:t.text,fontSize: isMobile ? '14px' : '17px',fontWeight:800,fontFamily:"'Syne',sans-serif",letterSpacing:'-0.03em',background:t.grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MordelonIA</h1>
@@ -1383,7 +1399,7 @@ export default function App() {
           {notif&&<div style={{position:'fixed',top:'68px',right:'16px',padding:'10px 16px',background:notif.type==='error'?'#2a0d0d':t.surface,border:`1px solid ${notif.type==='error'?'#ff5555':t.accent}`,borderRadius:'10px',color:notif.type==='error'?'#ff5555':t.accent,fontSize:'12px',zIndex:100,fontFamily:'monospace',animation:'fadeUp 0.2s ease'}}>{notif.msg}</div>}
 
           {/* MESSAGES */}
-          <div style={{flex:1,overflowY:'auto',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
+          <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',overscrollBehavior:'contain',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);handleFiles(e.dataTransfer.files);}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
