@@ -957,6 +957,24 @@ export default function App() {
     });
   };
 
+  const handlePaste=(e)=>{
+    const items = e.clipboardData?.items;
+    if(!items) return;
+    const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+    if(imageItems.length === 0) return;
+    e.preventDefault();
+    imageItems.forEach(item => {
+      const file = item.getAsFile();
+      if(!file) return;
+      // Renombrar con timestamp para identificarla
+      const ext = file.type.split('/')[1] || 'png';
+      const named = new File([file], `imagen-pegada-${Date.now()}.${ext}`, { type: file.type });
+      if(named.size > 15*1024*1024){ showNotif('Imagen supera 15MB','error'); return; }
+      setFiles(prev=>[...prev, named]);
+      showNotif('📋 Imagen pegada');
+    });
+  };
+
   const buildMsgs=async(history,text,fls)=>{
     // Máximo 6 mensajes de historial y contenido truncado agresivamente
     const trimmed = history.slice(-6);
@@ -1341,6 +1359,7 @@ export default function App() {
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=`${t.accent}55`;e.currentTarget.style.color=t.accent;}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.muted;}}>📎</button>
                 <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)}
+                  onPaste={handlePaste}
                   onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}
                   placeholder='Preguntá sobre código, pedí que mejore un caption, o subí un archivo...'
                   disabled={loading} rows={1}
