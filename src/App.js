@@ -1027,11 +1027,13 @@ export default function App() {
   };
 
   const buildMsgs=async(history,text,fls)=>{
-    const h=history.map(m=>({
+    // Máximo 12 mensajes de historial para no superar el límite de tokens
+    const trimmed = history.slice(-12);
+    const h=trimmed.map(m=>({
       role:m.role,
-      content:typeof m.content==='string'?m.content:
-        Array.isArray(m.content)?m.content.map(b=>b.type==='text'?b.text:'[archivo]').join('\n'):
-        String(m.content)
+      content:typeof m.content==='string'?m.content.slice(0,6000):
+        Array.isArray(m.content)?m.content.map(b=>b.type==='text'?b.text:'[archivo]').join('\n').slice(0,6000):
+        String(m.content).slice(0,6000)
     }));
     if(!fls.length) return [...h,{role:'user',content:text||''}];
     const parts=[];
@@ -1076,9 +1078,13 @@ export default function App() {
       const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
       const onWaiting=(sec,attempt)=>showNotif(`⏳ Rate limit — reintentando en ${sec}s (intento ${attempt})...`,'info');
 
+      // Modelo dinámico: 8b para chat normal (131k ctx), 70b solo si hay proyecto adjunto
+      const hasProjectCtx = !!(current.projectContext);
+      const chatModel = hasProjectCtx ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+
       // ── PASO 1: llamada sin stream para detectar tool calls ──────────────────
       const firstRes = await groqFetch({
-          model:'llama-3.3-70b-versatile',
+          model: chatModel,
           max_tokens:8192,
           tools: TOOL_DEFINITIONS,
           tool_choice: 'auto',
@@ -1128,7 +1134,7 @@ export default function App() {
         ];
 
         const streamRes = await groqFetch({
-            model:'llama-3.3-70b-versatile',
+            model: chatModel,
             max_tokens:8192,
             stream: true,
             messages: secondMsgs,
@@ -1158,7 +1164,7 @@ export default function App() {
       } else {
         // ── Sin tool calls: streaming normal ─────────────────────────────────
         const streamRes = await groqFetch({
-            model:'llama-3.3-70b-versatile',
+            model: chatModel,
             max_tokens:8192,
             stream: true,
             messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
