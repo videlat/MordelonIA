@@ -102,20 +102,17 @@ REGLA CRÍTICA: ARCHIVOS ADJUNTOS + ERRORES
 ═══════════════════════════════════════
 Cuando el usuario adjunta un archivo y pide corregir errores, modificar o mejorar:
 
-PASO 1 - ANALIZÁ PRIMERO:
-- Leé el archivo completo y entendé qué hace cada función
-- Si el usuario pegó un error de consola, identificá exactamente qué línea/función lo causa
-- NUNCA reescribas el archivo de memoria ni inventes cambios — solo tocás lo que está roto o lo que te pidieron
+CUÁNDO usar crear_archivo con archivos adjuntos — LEER BIEN:
 
-PASO 2 - APLICÁ LOS CAMBIOS:
-- Usá crear_archivo con el archivo COMPLETO: copiás todo el contenido original y solo modificás las partes necesarias
-- El filename debe ser el mismo que el original
-- PROHIBIDO eliminar funciones, variables, event listeners o lógica que no te pidieron tocar
-- Si el archivo tiene 150 líneas, el output debe tener ~150 líneas (no 30)
+SI el usuario pide analizar, comparar, revisar, explicar, buscar diferencias, o hace preguntas sobre el archivo:
+→ Respondé con TEXTO. Explicá lo que encontraste. NO uses crear_archivo.
 
-PASO 3 - EXPLICÁ:
-- Decí exactamente qué líneas cambiaste y por qué
-- Si encontraste bugs adicionales al analizar, mencionálos
+SI el usuario pide modificar, corregir, arreglar, aplicar cambios, o mejorar el archivo:
+→ Primero explicá brevemente qué vas a cambiar y por qué.
+→ Después llamá a crear_archivo con el archivo COMPLETO modificado.
+→ El filename debe ser idéntico al original.
+→ PROHIBIDO eliminar funciones o lógica que no te pidieron tocar.
+→ Si el archivo tiene 100 líneas, el output debe tener ~100 líneas.
 
 ERRORES DE CONSOLA - cómo interpretarlos:
 - "X is not defined": X se usa antes de ser declarado, o fue eliminado por error
@@ -1082,7 +1079,10 @@ export default function App() {
       const memoryBlock=formatMemoriesForPrompt(memories);
       const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
       const hasProjectCtx = !!(current.projectContext);
-      const chatModel = hasProjectCtx ? MODEL_SMART : MODEL_FAST;
+      const hasFiles = fls.length > 0;
+      // Sonnet si: hay archivos adjuntos, hay proyecto cargado, o el mensaje es largo (análisis)
+      const needsSmart = hasProjectCtx || hasFiles || text?.length > 500;
+      const chatModel = needsSmart ? MODEL_SMART : MODEL_FAST;
 
       // Convertir TOOL_DEFINITIONS de formato OpenAI a formato Anthropic
       const claudeTools = TOOL_DEFINITIONS.map(t => ({
