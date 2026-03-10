@@ -120,7 +120,16 @@ Tenés acceso a herramientas reales. Usalas cuando aporten valor:
 - buscar_web: cuando necesitás info actualizada
 - generar_imagen: cuando el usuario pide una imagen
 
-Usá las herramientas con criterio. No las fuerces. Si podés responder directamente, respondé directamente.`;
+═══════════════════════════════════════
+REGLA CRÍTICA: ARCHIVOS ADJUNTOS
+═══════════════════════════════════════
+Cuando el usuario adjunta un archivo (código, script, config, etc.) y pide modificaciones, correcciones, mejoras o cualquier cambio:
+1. SIEMPRE usá la tool `crear_archivo` para entregar el resultado
+2. El contenido debe ser el archivo COMPLETO con todos los cambios aplicados — nunca fragmentos ni "agregá esto acá"
+3. El filename debe ser el mismo que el original (ej: si subió "juego-2048.js", el output es "juego-2048.js")
+4. Después de crear el archivo, explicá brevemente qué cambiaste
+
+NUNCA respondas solo con un bloque de código cuando el usuario adjuntó un archivo y pidió modificarlo. Siempre `crear_archivo`.`;
 
 // ─── THEMES ───────────────────────────────────────────────────────────────────
 const THEMES = {
