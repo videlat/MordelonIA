@@ -477,16 +477,28 @@ export default function App() {
   };
 
   const buildMsgs=async(history,text,fls)=>{
-    const h=history.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:m.content}));
-    if(!fls.length) return [...h,{role:'user',content:text}];
-    const blocks=[];
+    const h=history.map(m=>({
+      role:m.role,
+      content:typeof m.content==='string'?m.content:
+        Array.isArray(m.content)?m.content.map(b=>b.type==='text'?b.text:'[archivo]').join('\n'):
+        String(m.content)
+    }));
+    if(!fls.length) return [...h,{role:'user',content:text||''}];
+    const parts=[];
     for(const f of fls){
-      if(isImg(f)){ const b=await readB64(f); blocks.push({type:'image',source:{type:'base64',media_type:getMT(f),data:b}}); }
-      else if(isPdf(f)){ const b=await readB64(f); blocks.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:b}}); }
-      else if(isCode(f)){ const tx=await readTxt(f); blocks.push({type:'text',text:`**Archivo: ${f.name}**\n\`\`\`${getExt(f.name)}\n${tx}\n\`\`\``}); }
+      if(isImg(f)){
+        const b=await readB64(f);
+        parts.push({type:'image_url',image_url:{url:`data:${getMT(f)};base64,${b}`}});
+      } else if(isPdf(f)){
+        // Groq no soporta PDFs nativamente, extraemos como texto descriptivo
+        parts.push({type:'text',text:`[PDF adjunto: ${f.name} - ${(f.size/1024).toFixed(1)}KB. El usuario subió este PDF.]`});
+      } else if(isCode(f)){
+        const tx=await readTxt(f);
+        parts.push({type:'text',text:`**Archivo: ${f.name}**\n\`\`\`${getExt(f.name)}\n${tx}\n\`\`\``});
+      }
     }
-    if(text) blocks.push({type:'text',text});
-    return [...h,{role:'user',content:blocks}];
+    if(text) parts.push({type:'text',text});
+    return [...h,{role:'user',content:parts}];
   };
 
   const send=async(override)=>{
@@ -501,15 +513,19 @@ export default function App() {
     try {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
       const apiMsgs=await buildMsgs(current.messages,text,fls);
-      const apiKey=process.env.REACT_APP_ANTHROPIC_KEY;
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
+      const apiKey=process.env.REACT_APP_GROQ_KEY;
+      const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:8192,system:SYSTEM_PROMPT,messages:apiMsgs}),
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+        body:JSON.stringify({
+          model:'llama-3.3-70b-versatile',
+          max_tokens:8192,
+          messages:[{role:'system',content:SYSTEM_PROMPT},...apiMsgs],
+        }),
       });
       const data=await res.json();
       if(data.error) throw new Error(data.error.message);
-      const replyTxt=data.content?.map(b=>b.text||'').join('')||'Sin respuesta.';
+      const replyTxt=data.choices?.[0]?.message?.content||'Sin respuesta.';
       updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:replyTxt,timestamp:Date.now(),...(origCode?{originalCode:origCode}:{})}]}));
     } catch(err){
       updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:`Error: ${err.message}`,timestamp:Date.now()}]}));
