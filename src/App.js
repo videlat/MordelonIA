@@ -9,7 +9,8 @@ import {
   TOOL_DEFINITIONS, executeTool, downloadVirtualFile, getVirtualFiles
 } from './tools';
 import {
-  readZip, readGitHub, readLooseFiles, buildProjectContext, generateReport
+  analyzeFromZip, analyzeFromFiles, analyzeFromGitHub,
+  formatProjectContext, buildAnalysisPrompt
 } from './projectAnalyzer';
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
@@ -712,164 +713,147 @@ function ToolsPanel({ executions, isOpen, onClose, t }) {
 }
 
 // ─── PROJECT ANALYZER MODAL ───────────────────────────────────────────────────
-function ProjectAnalyzerModal({ onLoad, onClose, t }) {
-  const [tab, setTab]           = useState('zip');   // zip | github | files
+function ProjectAnalyzerModal({ onClose, onAnalyze, t }) {
+  const [tab, setTab]           = useState('zip');
   const [githubUrl, setGithubUrl] = useState('');
-  const [status, setStatus]     = useState(null);    // null | loading | done | error
-  const [statusMsg, setStatusMsg] = useState('');
+  const [focus, setFocus]       = useState('completo');
+  const [status, setStatus]     = useState(null);
   const [project, setProject]   = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
   const zipRef   = useRef(null);
   const filesRef = useRef(null);
 
-  const processProject = async (promise) => {
-    setStatus('loading'); setStatusMsg('Procesando proyecto...');
-    try {
-      const proj = await promise;
-      setProject(proj);
-      setStatus('done');
-      setStatusMsg(`✓ ${proj.stats.totalFiles} archivos · ${proj.stats.totalLines.toLocaleString()} líneas cargadas`);
-    } catch (e) {
-      setStatus('error'); setStatusMsg(`Error: ${e.message}`);
-    }
-  };
+  const focusOptions = [
+    { key:'completo',     label:'Análisis completo', icon:'🔍' },
+    { key:'estructura',   label:'Estructura',         icon:'🏗' },
+    { key:'metricas',     label:'Métricas',           icon:'📊' },
+    { key:'seguridad',    label:'Seguridad',          icon:'🔒' },
+    { key:'arquitectura', label:'Arquitectura',       icon:'🧭' },
+    { key:'deuda',        label:'Deuda técnica',      icon:'💸' },
+  ];
 
-  const handleZip = (e) => {
+  const handleZip = async (e) => {
     const file = e.target.files?.[0];
-    if (file) processProject(readZip(file));
+    if (!file) return;
+    setStatus('loading'); setErrorMsg('');
+    try { const p = await analyzeFromZip(file); setProject(p); setStatus('ready'); }
+    catch(err) { setStatus('error'); setErrorMsg(err.message); }
   };
 
-  const handleFiles = (e) => {
-    if (e.target.files?.length) processProject(readLooseFiles(e.target.files));
+  const handleFiles = async (e) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setStatus('loading'); setErrorMsg('');
+    try { const p = await analyzeFromFiles(files); setProject(p); setStatus('ready'); }
+    catch(err) { setStatus('error'); setErrorMsg(err.message); }
   };
 
-  const handleGitHub = () => {
-    if (githubUrl.trim()) processProject(readGitHub(githubUrl.trim()));
+  const handleGitHub = async () => {
+    if (!githubUrl.trim()) return;
+    setStatus('loading'); setErrorMsg('');
+    try { const p = await analyzeFromGitHub(githubUrl.trim()); setProject(p); setStatus('ready'); }
+    catch(err) { setStatus('error'); setErrorMsg(err.message); }
   };
 
-  const tabStyle = (active) => ({
-    padding: '7px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-    fontFamily: 'monospace', border: `1px solid ${active ? t.accent : t.border}`,
-    background: active ? `${t.accent}18` : 'none',
-    color: active ? t.accent : t.muted, transition: 'all 0.15s',
-  });
+  const tabs = [
+    { key:'zip',    icon:'📦', label:'.ZIP' },
+    { key:'files',  icon:'📂', label:'Archivos' },
+    { key:'github', icon:'🐙', label:'GitHub' },
+  ];
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={onClose}>
-      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px',width:'560px',maxWidth:'95vw',overflow:'hidden',boxShadow:'0 24px 60px rgba(0,0,0,0.7)'}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px',width:'600px',maxWidth:'95vw',maxHeight:'90vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 24px 60px rgba(0,0,0,0.7)'}} onClick={e=>e.stopPropagation()}>
 
-        {/* Header */}
         <div style={{padding:'18px 20px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div>
-            <h3 style={{color:t.text,fontFamily:"'Syne',sans-serif",fontSize:'16px',margin:0}}>📁 Analizador de Proyectos</h3>
-            <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',margin:'3px 0 0'}}>Cargá el proyecto y chateá sobre él</p>
+            <h3 style={{color:t.text,fontFamily:"'Syne',sans-serif",fontSize:'17px',margin:0}}>🔬 Analizador de proyectos</h3>
+            <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',margin:'3px 0 0'}}>El análisis se inyecta como contexto en la conversación</p>
           </div>
           <button onClick={onClose} style={{background:'none',border:'none',color:t.muted,cursor:'pointer',fontSize:'22px',lineHeight:1}}>×</button>
         </div>
 
-        {/* Tabs */}
-        <div style={{padding:'14px 20px 0',display:'flex',gap:'8px'}}>
-          {[['zip','🗜 ZIP'],['github','🐙 GitHub'],['files','📄 Archivos']].map(([k,l])=>(
-            <button key={k} onClick={()=>{setTab(k);setProject(null);setStatus(null);}} style={tabStyle(tab===k)}>{l}</button>
-          ))}
-        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'18px 20px'}}>
+          <div style={{display:'flex',gap:'6px',marginBottom:'18px'}}>
+            {tabs.map(tb=>(
+              <button key={tb.key} onClick={()=>{setTab(tb.key);setProject(null);setStatus(null);setErrorMsg('');}}
+                style={{flex:1,padding:'9px',borderRadius:'10px',border:`1px solid ${tab===tb.key?t.accent:t.border}`,background:tab===tb.key?`${t.accent}18`:'none',color:tab===tb.key?t.accent:t.muted,cursor:'pointer',fontSize:'12px',fontFamily:"'IBM Plex Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:'6px',transition:'all 0.15s'}}>
+                {tb.icon} {tb.label}
+              </button>
+            ))}
+          </div>
 
-        {/* Body */}
-        <div style={{padding:'20px'}}>
-
-          {/* ZIP */}
-          {tab==='zip' && (
-            <div>
-              <div
-                onClick={()=>zipRef.current?.click()}
-                style={{border:`2px dashed ${t.border}`,borderRadius:'12px',padding:'40px 20px',textAlign:'center',cursor:'pointer',transition:'all 0.2s'}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}66`}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=t.border}>
-                <p style={{fontSize:'32px',marginBottom:'8px'}}>🗜</p>
-                <p style={{color:t.text,fontSize:'14px',marginBottom:'4px'}}>Subí el .zip de tu proyecto</p>
-                <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace'}}>node_modules y .git se ignoran automáticamente</p>
-              </div>
+          {tab==='zip'&&(
+            <div onClick={()=>zipRef.current?.click()} style={{border:`2px dashed ${status==='ready'?'#50fa7b':t.border}`,borderRadius:'12px',padding:'32px',textAlign:'center',cursor:'pointer',background:status==='ready'?'#0d2a0d':'none',transition:'all 0.2s'}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}88`} onMouseLeave={e=>e.currentTarget.style.borderColor=status==='ready'?'#50fa7b':t.border}>
+              <div style={{fontSize:'36px',marginBottom:'10px'}}>{status==='ready'?'✅':status==='loading'?'⏳':'📦'}</div>
+              <p style={{color:t.text,fontSize:'14px',margin:'0 0 4px'}}>{status==='ready'?`✓ ${project.name} · ${project.stats.codeFiles} archivos`:status==='loading'?'Procesando ZIP...':'Hacé click o arrastrá tu .zip acá'}</p>
+              {status!=='ready'&&<p style={{color:t.muted,fontSize:'11px',margin:0,fontFamily:'monospace'}}>node_modules y .git se ignoran automáticamente</p>}
               <input ref={zipRef} type='file' accept='.zip' style={{display:'none'}} onChange={handleZip}/>
             </div>
           )}
 
-          {/* GitHub */}
-          {tab==='github' && (
-            <div>
-              <p style={{color:t.muted,fontSize:'12px',fontFamily:'monospace',marginBottom:'10px'}}>Solo repos públicos. Sin token necesario.</p>
-              <div style={{display:'flex',gap:'8px'}}>
-                <input
-                  value={githubUrl} onChange={e=>setGithubUrl(e.target.value)}
-                  onKeyDown={e=>e.key==='Enter'&&handleGitHub()}
-                  placeholder='https://github.com/usuario/repo'
-                  style={{flex:1,background:t.bg,border:`1px solid ${t.border}`,borderRadius:'8px',color:t.text,padding:'9px 12px',fontSize:'13px',fontFamily:'monospace',outline:'none'}}
-                  onFocus={e=>e.target.style.borderColor=`${t.accent}88`}
-                  onBlur={e=>e.target.style.borderColor=t.border}
-                />
-                <button onClick={handleGitHub} disabled={!githubUrl.trim()||status==='loading'}
-                  style={{padding:'9px 16px',background:t.grad,border:'none',borderRadius:'8px',color:'#fff',cursor:'pointer',fontSize:'13px',fontFamily:'monospace',opacity:(!githubUrl.trim()||status==='loading')?0.5:1}}>
-                  Cargar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Archivos sueltos */}
-          {tab==='files' && (
-            <div>
-              <div
-                onClick={()=>filesRef.current?.click()}
-                style={{border:`2px dashed ${t.border}`,borderRadius:'12px',padding:'40px 20px',textAlign:'center',cursor:'pointer',transition:'all 0.2s'}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}66`}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=t.border}>
-                <p style={{fontSize:'32px',marginBottom:'8px'}}>📄</p>
-                <p style={{color:t.text,fontSize:'14px',marginBottom:'4px'}}>Seleccioná archivos del proyecto</p>
-                <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace'}}>Podés seleccionar múltiples archivos a la vez</p>
-              </div>
+          {tab==='files'&&(
+            <div onClick={()=>filesRef.current?.click()} style={{border:`2px dashed ${status==='ready'?'#50fa7b':t.border}`,borderRadius:'12px',padding:'32px',textAlign:'center',cursor:'pointer',background:status==='ready'?'#0d2a0d':'none',transition:'all 0.2s'}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}88`} onMouseLeave={e=>e.currentTarget.style.borderColor=status==='ready'?'#50fa7b':t.border}>
+              <div style={{fontSize:'36px',marginBottom:'10px'}}>{status==='ready'?'✅':status==='loading'?'⏳':'📂'}</div>
+              <p style={{color:t.text,fontSize:'14px',margin:'0 0 4px'}}>{status==='ready'?`✓ ${project.stats.codeFiles} archivos cargados`:status==='loading'?'Procesando...':'Seleccioná múltiples archivos'}</p>
+              {status!=='ready'&&<p style={{color:t.muted,fontSize:'11px',margin:0,fontFamily:'monospace'}}>Ctrl+A para seleccionar todos</p>}
               <input ref={filesRef} type='file' multiple style={{display:'none'}} onChange={handleFiles}/>
             </div>
           )}
 
-          {/* Status */}
-          {status && (
-            <div style={{marginTop:'14px',padding:'10px 14px',borderRadius:'8px',border:`1px solid ${status==='loading'?t.border:status==='done'?'#50fa7b33':'#ff555533'}`,background:status==='loading'?t.bg:status==='done'?'#0d2a0d':'#2a0d0d',display:'flex',alignItems:'center',gap:'10px'}}>
-              {status==='loading' && <div style={{width:'14px',height:'14px',border:`2px solid ${t.border}`,borderTopColor:t.accent,borderRadius:'50%',animation:'spin 0.7s linear infinite',flexShrink:0}}/>}
-              <span style={{color:status==='loading'?t.muted:status==='done'?'#50fa7b':'#ff5555',fontSize:'12px',fontFamily:'monospace'}}>{statusMsg}</span>
+          {tab==='github'&&(
+            <div>
+              <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
+                <input value={githubUrl} onChange={e=>setGithubUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleGitHub()}
+                  placeholder='https://github.com/usuario/repo'
+                  style={{flex:1,background:t.bg,border:`1px solid ${t.border}`,borderRadius:'10px',padding:'10px 14px',color:t.text,fontSize:'13px',fontFamily:'monospace',outline:'none'}}/>
+                <button onClick={handleGitHub} disabled={!githubUrl.trim()||status==='loading'}
+                  style={{padding:'10px 18px',background:t.grad,border:'none',borderRadius:'10px',color:'#fff',cursor:githubUrl.trim()?'pointer':'not-allowed',fontSize:'13px',opacity:githubUrl.trim()?1:0.5,flexShrink:0}}>
+                  {status==='loading'?'⏳':'Cargar'}
+                </button>
+              </div>
+              <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',margin:0}}>Solo repos públicos · Se leen hasta 60 archivos</p>
+              {status==='ready'&&<div style={{marginTop:'10px',padding:'10px 14px',background:'#0d2a0d',border:'1px solid #50fa7b33',borderRadius:'8px'}}>
+                <p style={{color:'#50fa7b',fontSize:'12px',margin:0,fontFamily:'monospace'}}>✓ {project.name} · Stack: {project.stack.join(', ')} · {project.stats.codeFiles} archivos · {project.stats.totalLines.toLocaleString()} líneas</p>
+              </div>}
             </div>
           )}
 
-          {/* Stats del proyecto cargado */}
-          {project && status==='done' && (
-            <div style={{marginTop:'14px',padding:'12px 14px',borderRadius:'8px',border:`1px solid ${t.border}`,background:t.bg}}>
-              <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'10px'}}>
-                {Object.entries(project.stats.byExt).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([ext,count])=>(
-                  <span key={ext} style={{padding:'2px 8px',background:`${t.accent}14`,border:`1px solid ${t.accent}33`,borderRadius:'4px',fontSize:'11px',fontFamily:'monospace',color:t.accent}}>.{ext} ×{count}</span>
+          {status==='error'&&<div style={{marginTop:'10px',padding:'10px 14px',background:'#2a0d0d',border:'1px solid #ff555533',borderRadius:'8px'}}><p style={{color:'#ff5555',fontSize:'12px',margin:0,fontFamily:'monospace'}}>✗ {errorMsg}</p></div>}
+
+          {status==='ready'&&project&&(
+            <div style={{marginTop:'16px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'12px'}}>
+                {[{label:'Archivos código',value:project.stats.codeFiles},{label:'Líneas totales',value:project.stats.totalLines.toLocaleString()},{label:'TODOs/FIXMEs',value:project.todos.length}].map((s,i)=>(
+                  <div key={i} style={{padding:'10px',background:t.bg,border:`1px solid ${t.border}`,borderRadius:'8px',textAlign:'center'}}>
+                    <p style={{color:t.accent,fontSize:'18px',fontWeight:800,fontFamily:"'Syne',sans-serif",margin:0}}>{s.value}</p>
+                    <p style={{color:t.muted,fontSize:'10px',fontFamily:'monospace',margin:'2px 0 0'}}>{s.label}</p>
+                  </div>
                 ))}
               </div>
-              {project.stats.secrets.length > 0 && (
-                <p style={{color:'#ff5555',fontSize:'11px',fontFamily:'monospace',marginBottom:'6px'}}>🔴 {project.stats.secrets.length} posible{project.stats.secrets.length>1?'s secret expuesto':'s secrets expuestos'}</p>
-              )}
-              {project.stats.todos.length > 0 && (
-                <p style={{color:'#f1fa8c',fontSize:'11px',fontFamily:'monospace',marginBottom:'6px'}}>⚠️ {project.stats.todos.length} TODOs/FIXMEs encontrados</p>
-              )}
+              <div style={{display:'flex',flexWrap:'wrap',gap:'4px',marginBottom:'14px'}}>
+                {project.stack.map(s=><span key={s} style={{padding:'3px 10px',background:`${t.accent}14`,border:`1px solid ${t.accent}33`,borderRadius:'20px',color:t.accent,fontSize:'11px',fontFamily:'monospace'}}>{s}</span>)}
+              </div>
+              <p style={{color:t.muted,fontSize:'10px',fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'8px'}}>Tipo de análisis</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'6px'}}>
+                {focusOptions.map(f=>(
+                  <button key={f.key} onClick={()=>setFocus(f.key)} style={{padding:'8px 10px',borderRadius:'8px',border:`1px solid ${focus===f.key?t.accent:t.border}`,background:focus===f.key?`${t.accent}18`:'none',color:focus===f.key?t.accent:t.muted,cursor:'pointer',fontSize:'11px',display:'flex',alignItems:'center',gap:'6px',transition:'all 0.15s'}}>
+                    {f.icon} {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Footer */}
         <div style={{padding:'14px 20px',borderTop:`1px solid ${t.border}`,display:'flex',gap:'8px',justifyContent:'flex-end'}}>
-          <button onClick={onClose} style={{padding:'8px 16px',background:'none',border:`1px solid ${t.border}`,borderRadius:'8px',color:t.muted,cursor:'pointer',fontSize:'13px',fontFamily:'monospace'}}>Cancelar</button>
-          {project && status==='done' && (
-            <>
-              <button onClick={()=>onLoad(project,'report')}
-                style={{padding:'8px 16px',background:'none',border:`1px solid ${t.accent}`,borderRadius:'8px',color:t.accent,cursor:'pointer',fontSize:'13px',fontFamily:'monospace'}}>
-                📊 Generar reporte
-              </button>
-              <button onClick={()=>onLoad(project,'chat')}
-                style={{padding:'8px 16px',background:t.grad,border:'none',borderRadius:'8px',color:'#fff',cursor:'pointer',fontSize:'13px',fontFamily:'monospace'}}>
-                💬 Chatear sobre el proyecto →
-              </button>
-            </>
-          )}
+          <button onClick={onClose} style={{padding:'9px 18px',background:'none',border:`1px solid ${t.border}`,borderRadius:'8px',color:t.muted,cursor:'pointer',fontSize:'13px'}}>Cancelar</button>
+          <button onClick={()=>onAnalyze(project,focus)} disabled={!project}
+            style={{padding:'9px 20px',background:project?t.grad:'none',border:`1px solid ${project?'transparent':t.border}`,borderRadius:'8px',color:project?'#fff':t.muted,cursor:project?'pointer':'not-allowed',fontSize:'13px',boxShadow:project?`0 0 16px ${t.accent}44`:'none',transition:'all 0.2s'}}>
+            🔬 Analizar proyecto →
+          </button>
         </div>
       </div>
     </div>
@@ -896,9 +880,9 @@ export default function App() {
   const [streamText,setStreamText]=useState('');
   const [isThinking,setIsThinking]=useState(false);
   const abortRef=useRef(null);
+  const streamTextRef=useRef('');
   const [toolExecutions,setToolExecutions]=useState([]);
   const [toolsPanelOpen,setToolsPanelOpen]=useState(false);
-  const [loadedProject,setLoadedProject]=useState(null);
 
   const t=THEMES[themeKey];
   const activeConv=convs.find(c=>c.id===activeId);
@@ -966,105 +950,20 @@ export default function App() {
     showNotif('Recuerdo eliminado');
   },[]);
 
-  const handleProjectLoad=useCallback(async(project, mode)=>{
-    setModal(null);
-    setLoadedProject(project);
-
-    // Asegurar que haya una conversación activa
-    let cid = activeId;
-    if (!cid) cid = newConv();
-
-    const apiKey = process.env.REACT_APP_GROQ_KEY;
-    const context = buildProjectContext(project);
-
-    if (mode === 'report') {
-      // Generar reporte automático
-      const reportMsg = {
-        role: 'user',
-        content: `[PROYECTO CARGADO: ${project.name}]\n\nGenerá un reporte técnico completo de este proyecto.\n\n${context}`,
-        timestamp: Date.now(),
-        attachments: [],
-      };
-      updateConv(cid, c => ({
-        ...c,
-        title: `📊 Reporte: ${project.name}`,
-        messages: [...c.messages, reportMsg],
-      }));
-      setLoading(true); setIsThinking(true); setStreamText('');
-      const controller = new AbortController();
-      abortRef.current = controller;
-      try {
-        const reportContent = await generateReport(project, apiKey);
-        const assistantMsg = { role:'assistant', content: reportContent, timestamp: Date.now() };
-        updateConv(cid, c => ({ ...c, messages: [...c.messages, assistantMsg] }));
-        showNotif(`📊 Reporte de ${project.name} generado`);
-      } catch(e) {
-        showNotif('Error generando reporte','error');
-      } finally { setLoading(false); setIsThinking(false); setStreamText(''); }
-    } else {
-      // Modo chat: inyectar contexto como mensaje del sistema del usuario
-      const contextMsg = {
-        role: 'user',
-        content: `He cargado mi proyecto "${project.name}" para que lo analices. Acá está el contexto completo:\n\n${context}`,
-        timestamp: Date.now(),
-        attachments: [],
-        isProjectContext: true,
-      };
-      updateConv(cid, c => ({
-        ...c,
-        title: `📁 ${project.name}`,
-        messages: [...c.messages, contextMsg],
-      }));
-
-      // Respuesta automática de bienvenida al proyecto
-      setLoading(true); setIsThinking(true); setStreamText('');
-      const controller = new AbortController();
-      abortRef.current = controller;
-      const memoryBlock = formatMemoriesForPrompt(memories);
-      const fullSystemPrompt = memoryBlock ? `${SYSTEM_PROMPT}\n\n${memoryBlock}` : SYSTEM_PROMPT;
-      try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-          signal: controller.signal,
-          body: JSON.stringify({
-            model:'llama-3.3-70b-versatile',
-            max_tokens: 1500,
-            stream: true,
-            messages:[
-              {role:'system', content: fullSystemPrompt},
-              {role:'user', content: contextMsg.content},
-            ],
-          }),
-        });
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = ''; let firstChunk = true;
-        while(true){
-          const {done,value} = await reader.read();
-          if(done) break;
-          for(const line of decoder.decode(value,{stream:true}).split('\n')){
-            if(!line.startsWith('data: ')) continue;
-            const data = line.slice(6).trim();
-            if(data==='[DONE]') break;
-            try{
-              const delta = JSON.parse(data).choices?.[0]?.delta?.content;
-              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} fullText+=delta; setStreamText(fullText); }
-            } catch(_){}
-          }
-        }
-        setStreamText(''); setIsThinking(false);
-        updateConv(cid, c=>({...c, messages:[...c.messages, {role:'assistant',content:fullText||'Proyecto cargado. ¿Por dónde arrancamos?',timestamp:Date.now()}]}));
-        showNotif(`📁 ${project.name} cargado en el chat`);
-      } catch(e){
-        setIsThinking(false); setStreamText('');
-        showNotif('Error cargando proyecto','error');
-      } finally { setLoading(false); setStreamText(''); setIsThinking(false); }
-    }
-  },[activeId, newConv, memories, updateConv]);
+  const handleProjectAnalyze=useCallback((project, focus)=>{
+    const id=genId();
+    const title=`🔬 ${project.name}`;
+    const ctx=formatProjectContext(project, focus);
+    const prompt=buildAnalysisPrompt(project, focus);
+    const conv={id,title,messages:[],createdAt:Date.now(),updatedAt:Date.now(),projectContext:ctx};
+    setConvs(prev=>[conv,...prev]);
+    setActiveId(id);
+    showNotif(`🔬 ${project.name} · ${project.stats.codeFiles} archivos cargados`);
+    setTimeout(()=>send(prompt),300);
+  },[]);
 
   const renameConv=useCallback((id,title)=>{
+
     setConvs(prev=>prev.map(c=>{
       if(c.id!==id) return c;
       const u={...c,title:title||c.title,updatedAt:Date.now()};
@@ -1234,7 +1133,7 @@ export default function App() {
             try{
               const parsed = JSON.parse(data);
               const delta = parsed.choices?.[0]?.delta?.content;
-              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; setStreamText(finalText); }
+              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; streamTextRef.current=finalText; setStreamText(finalText); }
             } catch(_) {}
           }
         }
@@ -1269,7 +1168,7 @@ export default function App() {
             try{
               const parsed = JSON.parse(data);
               const delta = parsed.choices?.[0]?.delta?.content;
-              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; setStreamText(finalText); }
+              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; streamTextRef.current=finalText; setStreamText(finalText); }
             } catch(_) {}
           }
         }
@@ -1302,15 +1201,16 @@ export default function App() {
         .finally(()=>setExtractingMemory(false));
 
     } catch(err){
-      setIsThinking(false); setStreamText('');
+      setIsThinking(false); setStreamText(''); streamTextRef.current='';
       if(err.name==='AbortError'){
-        if(streamText) updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:streamText+'\n\n*(respuesta interrumpida)*',timestamp:Date.now()}]}));
+        const captured = streamTextRef.current;
+        if(captured) updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:captured+'\n\n*(respuesta interrumpida)*',timestamp:Date.now()}]}));
         showNotif('Respuesta detenida');
       } else {
         updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:`Error: ${err.message}`,timestamp:Date.now()}]}));
         showNotif('Error al conectar','error');
       }
-    } finally { setLoading(false); setStreamText(''); setIsThinking(false); }
+    } finally { setLoading(false); setStreamText(''); setIsThinking(false); streamTextRef.current=''; }
   };
 
   if(!ready) return (
@@ -1353,9 +1253,9 @@ export default function App() {
             <div style={{display:'flex',gap:'6px',flexShrink:0}}>
               {[
                 {icon:'🔍',title:'Buscar Ctrl+K',fn:()=>setModal('search')},
-                {icon:'🧠',title:`Memoria`,fn:()=>setModal('memory'),label:extractingMemory?'…':memories.length>0?`${memories.length}`:''},
+                {icon:'🧠',title:'Memoria',fn:()=>setModal('memory'),label:extractingMemory?'…':memories.length>0?`${memories.length}`:''},
                 {icon:'⚙️',title:'Herramientas',fn:()=>setToolsPanelOpen(v=>!v),label:toolExecutions.length>0?`${toolExecutions.length}`:''},
-                {icon:'📁',title:'Analizar proyecto',fn:()=>setModal('project'),label:loadedProject?loadedProject.name.split('/').pop().slice(0,10):''},
+                {icon:'🔬',title:'Analizar proyecto',fn:()=>setModal('analyzer'),label:activeConv?.projectContext?'activo':''},
                 {icon:'📤',title:'Exportar Ctrl+E',fn:()=>activeConv&&exportConv(activeConv)},
                 {icon:'🎨',title:'Tema Ctrl+D',fn:cycleTheme,label:t.name},
                 {icon:'⌨️',title:'Atajos',fn:()=>setModal('shortcuts')},
@@ -1456,7 +1356,7 @@ export default function App() {
       {modal==='shortcuts'&&<ShortcutsModal onClose={()=>setModal(null)} t={t}/>}
       {modal==='diff'&&diffData&&<DiffModal original={diffData.o} modified={diffData.n} onClose={()=>setModal(null)} t={t}/>}
       {modal==='memory'&&<MemoryPanel memories={memories} onDelete={handleDeleteMemory} onClose={()=>setModal(null)} t={t}/>}
-      {modal==='project'&&<ProjectAnalyzerModal onLoad={handleProjectLoad} onClose={()=>setModal(null)} t={t}/>}
+      {modal==='analyzer'&&<ProjectAnalyzerModal onClose={()=>setModal(null)} onAnalyze={handleProjectAnalyze} t={t}/>}
       {modal==='analyzer'&&<ProjectAnalyzerModal onClose={()=>setModal(null)} onAnalyze={handleProjectAnalyze} t={t}/>}
       <input ref={fileRef} type='file' multiple accept='.py,.js,.ts,.jsx,.tsx,.html,.css,.java,.cpp,.c,.cs,.go,.rs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.md,.txt,.vue,.svelte,.kt,.swift,.dart,.pdf,.png,.jpg,.jpeg,.gif,.webp' style={{display:'none'}} onChange={e=>handleFiles(e.target.files)}/>
     </>
