@@ -1049,7 +1049,7 @@ export default function App() {
         parts.push({type:'text',text:`[PDF adjunto: ${f.name} - ${(f.size/1024).toFixed(1)}KB. El usuario subió este PDF.]`});
       } else if(isCode(f)){
         const tx=await readTxt(f);
-        parts.push({type:'text',text:`**Archivo: ${f.name}**\n\`\`\`${getExt(f.name)}\n${tx}\n\`\`\``});
+        parts.push({type:'text',text:`ARCHIVO ORIGINAL (${f.name}) — ESTE ES EL CONTENIDO EXACTO QUE DEBE SER LA BASE DE CUALQUIER MODIFICACIÓN. NO reescribir desde cero, NO cambiar IDs, NO cambiar estructura. Solo modificar lo que el usuario pida explícitamente:\n\`\`\`${getExt(f.name)}\n${tx}\n\`\`\``});
       }
     }
     if(text) parts.push({type:'text',text});
