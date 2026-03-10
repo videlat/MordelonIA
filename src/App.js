@@ -1071,6 +1071,7 @@ export default function App() {
     try {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
       const apiMsgs=await buildMsgs(current.messages,text,fls);
+      const apiKey=process.env.REACT_APP_GROQ_KEY;
       const memoryBlock=formatMemoriesForPrompt(memories);
       const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
       const onWaiting=(sec,attempt)=>showNotif(`⏳ Rate limit — reintentando en ${sec}s (intento ${attempt})...`,'info');
