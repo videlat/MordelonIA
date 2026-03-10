@@ -15,6 +15,17 @@ import {
   formatProjectContext, buildAnalysisPrompt
 } from './projectAnalyzer';
 
+// ─── RESPONSIVE HOOK ─────────────────────────────────────────────────────────
+function useWindowSize() {
+  const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const h = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return size;
+}
+
 // ─── CLAUDE FETCH ────────────────────────────────────────────────────────────
 // Llama al proxy serverless /api/claude para evitar CORS
 // Con retry automático en caso de rate limit (429)
@@ -164,7 +175,7 @@ function FileBadge({file, onRemove, t}) {
 }
 
 // ─── MESSAGE BUBBLE ───────────────────────────────────────────────────────────
-function Bubble({message, t, onDiff}) {
+function Bubble({message, t, onDiff, isMobile}) {
   const isUser=message.role==='user';
   const txt=typeof message.content==='string'?message.content:message.content?.find?.(b=>b.type==='text')?.text||'';
   const parts=parseMsgContent(txt);
@@ -172,18 +183,18 @@ function Bubble({message, t, onDiff}) {
   return (
     <div style={{display:'flex',justifyContent:isUser?'flex-end':'flex-start',marginBottom:'18px',gap:'10px',alignItems:'flex-start',animation:'fadeUp 0.25s ease'}}>
       {!isUser&&(
-        <div style={{width:'36px',height:'36px',borderRadius:'10px',background:t.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0,boxShadow:`0 0 16px ${t.accent}55`}}>🔥</div>
+        <div style={{width: isMobile?'30px':'36px',height:isMobile?'30px':'36px',borderRadius:'10px',background:t.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isMobile?'16px':'18px',flexShrink:0,boxShadow:`0 0 16px ${t.accent}55`}}>🔥</div>
       )}
-      <div style={{maxWidth:'78%'}}>
+      <div style={{maxWidth: isMobile ? '90%' : '78%'}}>
         {message.attachments?.length>0&&(
           <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'8px',justifyContent:isUser?'flex-end':'flex-start'}}>
             {message.attachments.map((a,i)=><FileBadge key={i} file={a} t={t}/>)}
           </div>
         )}
-        <div style={{background:isUser?t.ub:t.surface,border:`1px solid ${isUser?t.ubr:t.border}`,borderRadius:isUser?'16px 16px 4px 16px':'16px 16px 16px 4px',padding:'12px 16px'}}>
+        <div style={{background:isUser?t.ub:t.surface,border:`1px solid ${isUser?t.ubr:t.border}`,borderRadius:isUser?'16px 16px 4px 16px':'16px 16px 16px 4px',padding: isMobile ? '10px 12px' : '12px 16px'}}>
           {parts.map((p,i)=>p.type==='code'
             ?<CodeBlock key={i} code={p.content} language={p.language} t={t}/>
-            :<p key={i} style={{margin:0,color:t.text,fontSize:'14px',lineHeight:'1.7',whiteSpace:'pre-wrap',fontFamily:"'IBM Plex Sans',sans-serif"}}>{p.content}</p>
+            :<p key={i} style={{margin:0,color:t.text,fontSize: isMobile ? '13px' : '14px',lineHeight:'1.7',whiteSpace:'pre-wrap',fontFamily:"'IBM Plex Sans',sans-serif"}}>{p.content}</p>
           )}
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px',justifyContent:isUser?'flex-end':'flex-start'}}>
@@ -198,7 +209,7 @@ function Bubble({message, t, onDiff}) {
           )}
         </div>
       </div>
-      {isUser&&<div style={{width:'36px',height:'36px',borderRadius:'10px',background:t.ub,border:`1px solid ${t.ubr}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px',flexShrink:0}}>👤</div>}
+      {isUser&&<div style={{width:isMobile?'30px':'36px',height:isMobile?'30px':'36px',borderRadius:'10px',background:t.ub,border:`1px solid ${t.ubr}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isMobile?'14px':'16px',flexShrink:0}}>👤</div>}
     </div>
   );
 }
@@ -325,7 +336,7 @@ function SearchModal({conversations, onSelect, onClose, t}) {
 function DiffModal({original, modified, onClose, t}) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={onClose}>
-      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'14px',width:'900px',maxWidth:'95vw',maxHeight:'80vh',overflow:'hidden',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'14px',width:'900px',maxWidth:'98vw',maxHeight:'85vh',overflow:'hidden',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:'14px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <h3 style={{color:t.text,fontFamily:"'Syne',sans-serif",fontSize:'15px',margin:0}}>📊 Vista de diferencias</h3>
           <button onClick={onClose} style={{background:'none',border:'none',color:t.muted,cursor:'pointer',fontSize:'20px'}}>×</button>
@@ -836,7 +847,10 @@ export default function App() {
   const [input,setInput]=useState('');
   const [loading,setLoading]=useState(false);
   const [files,setFiles]=useState([]);
-  const [sidebarOpen,setSidebarOpen]=useState(true);
+  const { w: screenW } = useWindowSize();
+  const isMobile = screenW < 640;
+  const isTablet = screenW < 1024;
+  const [sidebarOpen,setSidebarOpen]=useState(screenW >= 640);
   const [themeKey,setThemeKey]=useState('dark');
   const [modal,setModal]=useState(null);
   const [diffData,setDiffData]=useState(null);
@@ -1315,29 +1329,35 @@ export default function App() {
         ::-webkit-scrollbar-thumb{background:${t.border};border-radius:2px}
       `}</style>
 
-      <div style={{display:'flex',height:'100vh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden'}}>
-        <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);}} onNew={newConv} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t}/>
+      <div style={{display:'flex',height:'100vh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden',position:'relative'}}>
+        {/* Overlay mobile: toca afuera del sidebar para cerrarlo */}
+        {isMobile && sidebarOpen && (
+          <div onClick={()=>setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:10,backdropFilter:'blur(2px)'}}/>
+        )}
+        <div style={{position: isMobile ? 'fixed' : 'relative', top:0, left:0, height:'100%', zIndex: isMobile ? 20 : 'auto'}}>
+          <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t}/>
+        </div>
 
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
           {/* HEADER */}
-          <div style={{padding:'12px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap:'10px',background:t.bg,flexShrink:0}}>
+          <div style={{padding: isMobile ? '10px 12px' : '12px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:t.bg,flexShrink:0}}>
             <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>
-            <div style={{fontSize:'28px',animation:'flamePulse 2s infinite'}}>🔥</div>
+            <div style={{fontSize: isMobile ? '22px' : '28px',animation:'flamePulse 2s infinite'}}>🔥</div>
             <div style={{flex:1,minWidth:0}}>
-              <h1 style={{color:t.text,fontSize:'17px',fontWeight:800,fontFamily:"'Syne',sans-serif",letterSpacing:'-0.03em',background:t.grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MordelonIA</h1>
-              <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeConv?`${activeConv.title} · ${activeConv.messages.length} mensajes`:'Seleccioná o creá una conversación'}</p>
+              <h1 style={{color:t.text,fontSize: isMobile ? '14px' : '17px',fontWeight:800,fontFamily:"'Syne',sans-serif",letterSpacing:'-0.03em',background:t.grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MordelonIA</h1>
+              {!isMobile && <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeConv?`${activeConv.title} · ${activeConv.messages.length} mensajes`:'Seleccioná o creá una conversación'}</p>}
             </div>
-            <div style={{display:'flex',gap:'6px',flexShrink:0}}>
+            <div style={{display:'flex',gap: isMobile ? '4px' : '6px',flexShrink:0}}>
               {[
-                {icon:'🔍',title:'Buscar Ctrl+K',fn:()=>setModal('search')},
-                {icon:'🧠',title:'Memoria',fn:()=>setModal('memory'),label:extractingMemory?'…':memories.length>0?`${memories.length}`:''},
-                {icon:'⚙️',title:'Herramientas',fn:()=>setToolsPanelOpen(v=>!v),label:toolExecutions.length>0?`${toolExecutions.length}`:''},
-                {icon:'🔬',title:'Analizar proyecto',fn:()=>setModal('analyzer'),label:activeConv?.projectContext?'activo':''},
-                {icon:'📤',title:'Exportar Ctrl+E',fn:()=>activeConv&&exportConv(activeConv)},
-                {icon:'🎨',title:'Tema Ctrl+D',fn:cycleTheme,label:t.name},
-                {icon:'⌨️',title:'Atajos',fn:()=>setModal('shortcuts')},
-              ].map((b,i)=>(
-                <button key={i} onClick={b.fn} title={b.title} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,padding:'5px 10px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontFamily:'monospace',display:'flex',alignItems:'center',gap:'4px',whiteSpace:'nowrap',transition:'border-color 0.2s'}}
+                {icon:'🔍',title:'Buscar Ctrl+K',fn:()=>setModal('search'), mobileShow: true},
+                {icon:'🧠',title:'Memoria',fn:()=>setModal('memory'),label:extractingMemory?'…':memories.length>0?`${memories.length}`:'', mobileShow: false},
+                {icon:'⚙️',title:'Herramientas',fn:()=>setToolsPanelOpen(v=>!v),label:toolExecutions.length>0?`${toolExecutions.length}`:'', mobileShow: false},
+                {icon:'🔬',title:'Analizar proyecto',fn:()=>setModal('analyzer'),label:activeConv?.projectContext?'activo':'', mobileShow: false},
+                {icon:'📤',title:'Exportar Ctrl+E',fn:()=>activeConv&&exportConv(activeConv), mobileShow: false},
+                {icon:'🎨',title:'Tema Ctrl+D',fn:cycleTheme,label:isMobile?'':t.name, mobileShow: true},
+                {icon:'⌨️',title:'Atajos',fn:()=>setModal('shortcuts'), mobileShow: false},
+              ].filter(b => !isMobile || b.mobileShow).map((b,i)=>(
+                <button key={i} onClick={b.fn} title={b.title} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,padding: isMobile ? '5px 8px' : '5px 10px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontFamily:'monospace',display:'flex',alignItems:'center',gap:'4px',whiteSpace:'nowrap',transition:'border-color 0.2s'}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}88`} onMouseLeave={e=>e.currentTarget.style.borderColor=t.border}>
                   {b.icon}{b.label?` ${b.label}`:''}
                 </button>
@@ -1353,7 +1373,7 @@ export default function App() {
           {notif&&<div style={{position:'fixed',top:'68px',right:'16px',padding:'10px 16px',background:notif.type==='error'?'#2a0d0d':t.surface,border:`1px solid ${notif.type==='error'?'#ff5555':t.accent}`,borderRadius:'10px',color:notif.type==='error'?'#ff5555':t.accent,fontSize:'12px',zIndex:100,fontFamily:'monospace',animation:'fadeUp 0.2s ease'}}>{notif.msg}</div>}
 
           {/* MESSAGES */}
-          <div style={{flex:1,overflowY:'auto',padding:'20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
+          <div style={{flex:1,overflowY:'auto',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);handleFiles(e.dataTransfer.files);}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
@@ -1367,7 +1387,7 @@ export default function App() {
                       <span key={tag} style={{padding:'3px 10px',background:`${t.accent}14`,border:`1px solid ${t.accent}33`,borderRadius:'20px',color:t.accent,fontSize:'11px',fontFamily:'monospace'}}>{tag}</span>
                     ))}
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',maxWidth:'580px',margin:'0 auto'}}>
+                  <div style={{display:'grid',gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',gap:'10px',maxWidth:'580px',margin:'0 auto'}}>
                     {SUGGESTIONS.map((s,i)=>(
                       <button key={i} onClick={()=>{const id=newConv();setTimeout(()=>send(s.text),50);}} style={{background:t.surface,border:`1px solid ${t.border}`,color:t.text,padding:'12px 14px',borderRadius:'10px',cursor:'pointer',fontSize:'12px',textAlign:'left',transition:'all 0.2s',lineHeight:1.4,fontFamily:"'IBM Plex Sans',sans-serif"}}
                         onMouseEnter={e=>{e.currentTarget.style.borderColor=`${t.accent}55`;e.currentTarget.style.color=t.accent;}}
@@ -1380,7 +1400,7 @@ export default function App() {
                 </div>
               )}
               {activeConv&&messages.length===0&&<div style={{textAlign:'center',paddingTop:'60px'}}><p style={{color:t.muted,fontSize:'14px'}}>Conversación nueva. ¿Arrancamos?</p></div>}
-              {messages.map((m,i)=><Bubble key={i} message={m} t={t} onDiff={(o,n)=>{setDiffData({o,n});setModal('diff');}}/>)}
+              {messages.map((m,i)=><Bubble key={i} message={m} t={t} isMobile={isMobile} onDiff={(o,n)=>{setDiffData({o,n});setModal('diff');}}/>)}
               {isThinking&&!streamText&&!chunkStatus&&<Thinking t={t}/>}
               {chunkStatus&&!streamText&&(
                 <div style={{display:'flex',gap:'10px',marginBottom:'18px',alignItems:'flex-start'}}>
@@ -1396,7 +1416,7 @@ export default function App() {
           </div>
 
           {/* INPUT */}
-          <div style={{padding:'10px 18px 18px',borderTop:`1px solid ${t.border}`,background:t.bg,flexShrink:0}}>
+          <div style={{padding: isMobile ? '8px 10px 14px' : '10px 18px 18px',borderTop:`1px solid ${t.border}`,background:t.bg,flexShrink:0}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
               {files.length>0&&(
                 <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'8px'}}>
@@ -1430,7 +1450,7 @@ export default function App() {
                     : '→'}
                 </button>
               </div>
-              <p style={{color:t.muted,fontSize:'10px',textAlign:'center',marginTop:'6px',fontFamily:'monospace'}}>Enter enviar · Shift+Enter nueva línea · Ctrl+K buscar · Ctrl+N nueva · Ctrl+E exportar · Ctrl+D tema</p>
+              {!isMobile && <p style={{color:t.muted,fontSize:'10px',textAlign:'center',marginTop:'6px',fontFamily:'monospace'}}>Enter enviar · Shift+Enter nueva línea · Ctrl+K buscar · Ctrl+N nueva · Ctrl+E exportar · Ctrl+D tema</p>}
             </div>
           </div>
         </div>
