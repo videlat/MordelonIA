@@ -1067,7 +1067,10 @@ export default function App() {
     if((!text&&!files.length)||loading) return;
     let cid=activeId||newConv();
     const fls=[...files];
-    const origCode=fls.length>0&&isCode(fls[0])?await readTxt(fls[0]).catch(()=>null):null;
+    // Pre-leer archivo grande ANTES de limpiar estado para que no se pierda la referencia
+    const _largeCodeFile = fls.find(f => isCode(f));
+    const _largeContent = _largeCodeFile ? await readTxt(_largeCodeFile).catch(()=>null) : null;
+    const origCode = _largeContent || (_largeCodeFile ? null : (fls.length>0&&isCode(fls[0])?await readTxt(fls[0]).catch(()=>null):null));
     const userMsg={role:'user',content:text,timestamp:Date.now(),attachments:fls.map(f=>({name:f.name,type:f.type,size:f.size}))};
     setInput(''); setFiles([]); setLoading(true); setIsThinking(true); setStreamText('');
     updateConv(cid,c=>({...c,messages:[...c.messages,userMsg],title:c.messages.length===0?(text?.slice(0,48)||fls[0]?.name||'Conversación'):c.title}));
@@ -1079,10 +1082,9 @@ export default function App() {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
 
       // ── MODO CHUNKS: archivo grande → análisis multi-fase ──────────────────
-      const largeCodeFile = fls.find(f => isCode(f));
-      if(largeCodeFile){
-        const largeContent = await readTxt(largeCodeFile).catch(()=>null);
-        if(largeContent && largeContent.length > LARGE_FILE_THRESHOLD){
+      const largeCodeFile = _largeCodeFile;
+      const largeContent = _largeContent;
+      if(largeCodeFile && largeContent && largeContent.length > LARGE_FILE_THRESHOLD){
           setIsThinking(false);
           let accumulated = '';
           const memBlockChunk = formatMemoriesForPrompt(memories);
@@ -1114,7 +1116,6 @@ export default function App() {
           setStreamText(''); streamTextRef.current='';
           setLoading(false); setIsThinking(false);
           return;
-        }
       }
       // ── FIN MODO CHUNKS ────────────────────────────────────────────────────
 
