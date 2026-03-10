@@ -976,14 +976,37 @@ export default function App() {
   };
 
   const buildMsgs=async(history,text,fls)=>{
-    // Máximo 6 mensajes de historial y contenido truncado agresivamente
+    // Máximo 6 mensajes de historial, reconstruyendo bloques de archivos guardados
     const trimmed = history.slice(-6);
-    const h=trimmed.map(m=>({
-      role:m.role,
-      content:typeof m.content==='string'?m.content.slice(0,2000):
-        Array.isArray(m.content)?m.content.map(b=>b.type==='text'?b.text:'[archivo]').join('\n').slice(0,2000):
-        String(m.content).slice(0,2000)
-    }));
+    const h = trimmed.map(m => {
+      // Mensajes de assistant: siempre texto plano
+      if(m.role === 'assistant'){
+        const txt = typeof m.content==='string' ? m.content :
+          Array.isArray(m.content) ? m.content.map(b=>b.type==='text'?b.text:'').join('\n') :
+          String(m.content);
+        return { role:'assistant', content: txt.slice(0,3000) };
+      }
+      // Mensajes de usuario: reconstruir con archivos si los hay
+      const parts = [];
+      if(m.attachments?.length){
+        for(const att of m.attachments){
+          if(att._b64 && att.type?.startsWith('image/')){
+            parts.push({type:'image',source:{type:'base64',media_type:att.type,data:att._b64}});
+          } else if(att._b64 && (att.name?.endsWith('.pdf')||att.type==='application/pdf')){
+            parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:att._b64}});
+            parts.push({type:'text',text:`(PDF: ${att.name})`});
+          } else if(att._text){
+            const tx = att._text.slice(0,20000);
+            parts.push({type:'text',text:`ARCHIVO (${att.name}):\n\`\`\`${getExt(att.name)}\n${tx}\n\`\`\``});
+          } else if(att.name){
+            parts.push({type:'text',text:`[archivo: ${att.name}]`});
+          }
+        }
+      }
+      const txt = typeof m.content==='string' ? m.content.slice(0,2000) : '';
+      if(txt) parts.push({type:'text',text:txt});
+      return { role:'user', content: parts.length > 0 ? parts : (txt||'') };
+    });
     if(!fls.length) return [...h,{role:'user',content:text||''}];
     const parts=[];
     for(const f of fls){
@@ -1019,7 +1042,22 @@ export default function App() {
     const _largeCodeFile = fls.find(f => isCode(f));
     const _largeContent = _largeCodeFile ? await readTxt(_largeCodeFile).catch(()=>null) : null;
     const origCode = _largeContent || (_largeCodeFile ? null : (fls.length>0&&isCode(fls[0])?await readTxt(fls[0]).catch(()=>null):null));
-    const userMsg={role:'user',content:text,timestamp:Date.now(),attachments:fls.map(f=>({name:f.name,type:f.type,size:f.size}))};
+    // Procesar archivos y guardar contenido en el mensaje para reuso en historial
+    const processedAttachments = await Promise.all(fls.map(async f => {
+      if(isImg(f)){
+        const b = await readB64(f).catch(()=>null);
+        return { name:f.name, type:f.type, size:f.size, _b64:b };
+      } else if(isPdf(f)){
+        const b = await readB64(f).catch(()=>null);
+        return { name:f.name, type:f.type, size:f.size, _b64:b };
+      } else if(isCode(f)){
+        // El contenido de código ya fue leído en _largeContent o se lee aquí
+        const tx = (f===_largeCodeFile && _largeContent) ? _largeContent : await readTxt(f).catch(()=>null);
+        return { name:f.name, type:f.type, size:f.size, _text:tx };
+      }
+      return { name:f.name, type:f.type, size:f.size };
+    }));
+    const userMsg={role:'user',content:text,timestamp:Date.now(),attachments:processedAttachments};
     setInput(''); setFiles([]); setLoading(true); setIsThinking(true); setStreamText('');
     updateConv(cid,c=>({...c,messages:[...c.messages,userMsg],title:c.messages.length===0?(text?.slice(0,48)||fls[0]?.name||'Conversación'):c.title}));
 
