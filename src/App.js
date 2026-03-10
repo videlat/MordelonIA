@@ -13,43 +13,26 @@ import {
   formatProjectContext, buildAnalysisPrompt
 } from './projectAnalyzer';
 
-// ─── GROQ FETCH CON RETRY AUTOMÁTICO ─────────────────────────────────────────
-// Maneja rate limit 429: lee retry-after y reintenta automáticamente
-const groqFetch = async (body, signal, onWaiting, maxRetries = 4) => {
-  const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-  const apiKey   = process.env.REACT_APP_GROQ_KEY;
-  let attempt = 0;
-
-  while (attempt <= maxRetries) {
-    const res = await fetch(GROQ_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      signal,
-      body: JSON.stringify(body),
-    });
-
-    if (res.status !== 429) return res; // OK o error no-rate-limit → devolver tal cual
-
-    attempt++;
-    if (attempt > maxRetries) return res; // agotamos reintentos
-
-    // Leer cuántos segundos esperar (Groq lo manda en el header o en el body)
-    let waitSec = parseFloat(res.headers.get('retry-after') || '0');
-    if (!waitSec || isNaN(waitSec)) {
-      try {
-        const errBody = await res.clone().json();
-        // El mensaje suele ser "Please try again in 53.79s"
-        const match = errBody?.error?.message?.match(/try again in ([\d.]+)s/);
-        waitSec = match ? parseFloat(match[1]) : 10 * attempt;
-      } catch { waitSec = 10 * attempt; }
-    }
-    // Pequeño buffer extra para no volver a pegar el límite de inmediato
-    waitSec = Math.ceil(waitSec) + 2;
-
-    if (onWaiting) onWaiting(waitSec, attempt);
-    await new Promise(r => setTimeout(r, waitSec * 1000));
-  }
+// ─── CLAUDE FETCH ────────────────────────────────────────────────────────────
+// Llama a la API de Anthropic con soporte de streaming y tool use
+const claudeFetch = async (body, signal) => {
+  const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
+  const apiKey = process.env.REACT_APP_ANTHROPIC_KEY;
+  return fetch(CLAUDE_URL, {
+    method:  'POST',
+    headers: {
+      'Content-Type':      'application/json',
+      'x-api-key':         apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    signal,
+    body: JSON.stringify(body),
+  });
 };
+
+// Modelos
+const MODEL_FAST  = 'claude-haiku-4-5';   // chat normal, correcciones rápidas
+const MODEL_SMART = 'claude-sonnet-4-5';  // análisis de proyectos, razonamiento complejo
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Sos MordelonIA, una IA personal con personalidad propia — creada específicamente para este usuario.
@@ -121,15 +104,30 @@ Tenés acceso a herramientas reales. Usalas cuando aporten valor:
 - generar_imagen: cuando el usuario pide una imagen
 
 ═══════════════════════════════════════
-REGLA CRÍTICA: ARCHIVOS ADJUNTOS
+REGLA CRÍTICA: ARCHIVOS ADJUNTOS + ERRORES
 ═══════════════════════════════════════
-Cuando el usuario adjunta un archivo (código, script, config, etc.) y pide modificaciones, correcciones, mejoras o cualquier cambio:
-1. SIEMPRE usá la tool \`crear_archivo\` para entregar el resultado
-2. El contenido debe ser el archivo COMPLETO con todos los cambios aplicados — nunca fragmentos ni "agregá esto acá"
-3. El filename debe ser el mismo que el original (ej: si subió "juego-2048.js", el output es "juego-2048.js")
-4. Después de crear el archivo, explicá brevemente qué cambiaste
+Cuando el usuario adjunta un archivo y pide corregir errores, modificar o mejorar:
 
-NUNCA respondas solo con un bloque de código cuando el usuario adjuntó un archivo y pidió modificarlo. Siempre usar crear_archivo.`;
+PASO 1 - ANALIZÁ PRIMERO:
+- Leé el archivo completo y entendé qué hace cada función
+- Si el usuario pegó un error de consola, identificá exactamente qué línea/función lo causa
+- NUNCA reescribas el archivo de memoria ni inventes cambios — solo tocás lo que está roto o lo que te pidieron
+
+PASO 2 - APLICÁ LOS CAMBIOS:
+- Usá crear_archivo con el archivo COMPLETO: copiás todo el contenido original y solo modificás las partes necesarias
+- El filename debe ser el mismo que el original
+- PROHIBIDO eliminar funciones, variables, event listeners o lógica que no te pidieron tocar
+- Si el archivo tiene 150 líneas, el output debe tener ~150 líneas (no 30)
+
+PASO 3 - EXPLICÁ:
+- Decí exactamente qué líneas cambiaste y por qué
+- Si encontraste bugs adicionales al analizar, mencionálos
+
+ERRORES DE CONSOLA - cómo interpretarlos:
+- "X is not defined": X se usa antes de ser declarado, o fue eliminado por error
+- "Cannot read property of undefined": un objeto es null/undefined en ese punto
+- "is not a function": la función no existe o fue sobreescrita
+Siempre buscá la causa raíz. No parchés con try/catch ni reescribas todo.`;
 
 // ─── THEMES ───────────────────────────────────────────────────────────────────
 const THEMES = {
@@ -1082,44 +1080,69 @@ export default function App() {
     try {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
       const apiMsgs=await buildMsgs(current.messages,text,fls);
-      const apiKey=process.env.REACT_APP_GROQ_KEY;
       const memoryBlock=formatMemoriesForPrompt(memories);
       const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
-      const onWaiting=(sec,attempt)=>showNotif(`⏳ Rate limit — reintentando en ${sec}s (intento ${attempt})...`,'info');
+      const hasProjectCtx = !!(current.projectContext);
+      const chatModel = hasProjectCtx ? MODEL_SMART : MODEL_FAST;
 
-      // Modelo dinámico:
-      // - PASO 1 (detección tools): siempre 70b, es el único que maneja function calling bien
-      // - PASO 3 (respuesta final): 8b si es chat simple, 70b si hay proyecto o usó tools
+      // Convertir TOOL_DEFINITIONS de formato OpenAI a formato Anthropic
+      const claudeTools = TOOL_DEFINITIONS.map(t => ({
+        name: t.function.name,
+        description: t.function.description,
+        input_schema: t.function.parameters,
+      }));
 
-      // ── PASO 1: llamada sin stream para detectar tool calls ──────────────────
-      const firstRes = await groqFetch({
-          model: 'llama-3.3-70b-versatile',
-          max_tokens:8192,
-          tools: TOOL_DEFINITIONS,
-          tool_choice: 'auto',
-          messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
-        }, controller.signal, onWaiting);
+      // ── PASO 1: llamada para detectar tool use ───────────────────────────────
+      const firstRes = await claudeFetch({
+          model: chatModel,
+          max_tokens: 8192,
+          system: fullSystemPrompt,
+          tools: claudeTools,
+          messages: apiMsgs,
+        }, controller.signal);
       if(!firstRes.ok){ const e=await firstRes.json(); throw new Error(e.error?.message||`HTTP ${firstRes.status}`); }
       const firstData = await firstRes.json();
-      const firstChoice = firstData.choices?.[0];
-      const toolCalls = firstChoice?.message?.tool_calls;
-
-      // Modelo para la respuesta final: 70b si usó tools o hay proyecto, 8b si es chat simple
-      const hasProjectCtx = !!(current.projectContext);
-      const chatModel = (toolCalls?.length > 0 || hasProjectCtx) ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+      // Anthropic devuelve tool_use blocks en content
+      const toolUseBlocks = firstData.content?.filter(b => b.type === 'tool_use') || [];
 
       let finalText = '';
 
-      if(toolCalls?.length > 0) {
+      // Helper para streaming SSE de Anthropic
+      const streamAnthropic = async (res) => {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let firstChunk = true;
+        while(true){
+          const {done,value} = await reader.read();
+          if(done) break;
+          const chunk = decoder.decode(value,{stream:true});
+          for(const line of chunk.split('\n')){
+            if(!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if(data==='[DONE]' || data==='') continue;
+            try{
+              const parsed = JSON.parse(data);
+              // Anthropic SSE: event type content_block_delta con delta.text
+              if(parsed.type==='content_block_delta' && parsed.delta?.type==='text_delta'){
+                const delta = parsed.delta.text;
+                if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; streamTextRef.current=finalText; setStreamText(finalText); }
+              }
+            } catch(_) {}
+          }
+        }
+      };
+
+      const apiKey = process.env.REACT_APP_ANTHROPIC_KEY;
+
+      if(toolUseBlocks.length > 0) {
         // ── PASO 2: ejecutar herramientas ─────────────────────────────────────
         setIsThinking(false);
         setToolsPanelOpen(true);
         const toolResults = [];
 
-        for(const tc of toolCalls) {
-          const toolName = tc.function.name;
-          let args = {};
-          try { args = JSON.parse(tc.function.arguments); } catch(_) {}
+        for(const tc of toolUseBlocks) {
+          const toolName = tc.name;
+          const args = tc.input || {};
 
           const execution = { id: tc.id, toolName, args, status: 'running', startedAt: Date.now(), result: null };
           setToolExecutions(prev => [...prev, execution]);
@@ -1131,77 +1154,54 @@ export default function App() {
           setToolExecutions(prev => prev.map(e => e.id===tc.id ? {...execution} : e));
 
           toolResults.push({
-            tool_call_id: tc.id,
-            role: 'tool',
+            type: 'tool_result',
+            tool_use_id: tc.id,
             content: JSON.stringify(result),
           });
         }
 
         // ── PASO 3: segunda llamada con resultados de tools + stream ──────────
         setIsThinking(true);
+        // Anthropic: el historial incluye el assistant turn con tool_use + user turn con tool_result
         const secondMsgs = [
-          {role:'system',content:fullSystemPrompt},
           ...apiMsgs,
-          firstChoice.message,
-          ...toolResults,
+          { role: 'assistant', content: firstData.content },
+          { role: 'user', content: toolResults },
         ];
 
-        const streamRes = await groqFetch({
+        const streamRes = await claudeFetch({
             model: chatModel,
-            max_tokens:8192,
+            max_tokens: 8192,
+            system: fullSystemPrompt,
+            tools: claudeTools,
             stream: true,
             messages: secondMsgs,
-          }, controller.signal, onWaiting);
+          }, controller.signal);
         if(!streamRes.ok){ const e=await streamRes.json(); throw new Error(e.error?.message||`HTTP ${streamRes.status}`); }
-
-        const reader = streamRes.body.getReader();
-        const decoder = new TextDecoder();
-        let firstChunk = true;
-
-        while(true){
-          const {done,value} = await reader.read();
-          if(done) break;
-          const chunk = decoder.decode(value,{stream:true});
-          for(const line of chunk.split('\n')){
-            if(!line.startsWith('data: ')) continue;
-            const data = line.slice(6).trim();
-            if(data==='[DONE]') break;
-            try{
-              const parsed = JSON.parse(data);
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; streamTextRef.current=finalText; setStreamText(finalText); }
-            } catch(_) {}
-          }
-        }
+        await streamAnthropic(streamRes);
 
       } else {
-        // ── Sin tool calls: streaming normal ─────────────────────────────────
-        const streamRes = await groqFetch({
-            model: chatModel,
-            max_tokens:8192,
-            stream: true,
-            messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
-          }, controller.signal, onWaiting);
-        if(!streamRes.ok){ const e=await streamRes.json(); throw new Error(e.error?.message||`HTTP ${streamRes.status}`); }
-
-        const reader = streamRes.body.getReader();
-        const decoder = new TextDecoder();
-        let firstChunk = true;
-
-        while(true){
-          const {done,value} = await reader.read();
-          if(done) break;
-          const chunk = decoder.decode(value,{stream:true});
-          for(const line of chunk.split('\n')){
-            if(!line.startsWith('data: ')) continue;
-            const data = line.slice(6).trim();
-            if(data==='[DONE]') break;
-            try{
-              const parsed = JSON.parse(data);
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; streamTextRef.current=finalText; setStreamText(finalText); }
-            } catch(_) {}
-          }
+        // ── Sin tool use: streaming normal ────────────────────────────────────
+        // Extraer texto directo si Anthropic ya respondió sin tools
+        const directText = firstData.content?.find(b=>b.type==='text')?.text || '';
+        if(directText){
+          // Simular streaming del texto ya recibido
+          setIsThinking(false);
+          finalText = directText;
+          setStreamText(finalText);
+          streamTextRef.current = finalText;
+        } else {
+          // Pedir con stream=true
+          const streamRes = await claudeFetch({
+              model: chatModel,
+              max_tokens: 8192,
+              system: fullSystemPrompt,
+              tools: claudeTools,
+              stream: true,
+              messages: apiMsgs,
+            }, controller.signal);
+          if(!streamRes.ok){ const e=await streamRes.json(); throw new Error(e.error?.message||`HTTP ${streamRes.status}`); }
+          await streamAnthropic(streamRes);
         }
       }
 
@@ -1214,7 +1214,7 @@ export default function App() {
       // ── Extraer memorias en background ───────────────────────────────────────
       const updatedMsgs=[...current.messages,userMsg,assistantMsg];
       setExtractingMemory(true);
-      extractMemoriesFromConv(updatedMsgs, memories, apiKey)
+      extractMemoriesFromConv(updatedMsgs, memories, process.env.REACT_APP_ANTHROPIC_KEY)
         .then(async(newMems)=>{
           if(newMems.length>0){
             const saved=[];
