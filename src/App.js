@@ -129,7 +129,7 @@ Cuando el usuario adjunta un archivo (código, script, config, etc.) y pide modi
 3. El filename debe ser el mismo que el original (ej: si subió "juego-2048.js", el output es "juego-2048.js")
 4. Después de crear el archivo, explicá brevemente qué cambiaste
 
-NUNCA respondas solo con un bloque de código cuando el usuario adjuntó un archivo y pidió modificarlo. Siempre `crear_archivo`.`;
+NUNCA respondas solo con un bloque de código cuando el usuario adjuntó un archivo y pidió modificarlo. Siempre usar crear_archivo.`;
 
 // ─── THEMES ───────────────────────────────────────────────────────────────────
 const THEMES = {
