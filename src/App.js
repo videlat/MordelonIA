@@ -5,6 +5,12 @@ import {
   extractMemoriesFromConv, formatMemoriesForPrompt,
   MEMORY_CATEGORIES
 } from './memory';
+import {
+  TOOL_DEFINITIONS, executeTool, downloadVirtualFile, getVirtualFiles
+} from './tools';
+import {
+  readZip, readGitHub, readLooseFiles, buildProjectContext, generateReport
+} from './projectAnalyzer';
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Sos MordelonIA, una IA personal con personalidad propia — creada específicamente para este usuario.
@@ -63,7 +69,19 @@ PERSONALIDAD EN ACCIÓN
 - Si el usuario hace algo bien: reconocelo sin exagerar, nada de "¡Excelente pregunta!"
 - Nunca decís "¡Claro que sí!" ni "¡Por supuesto!" — esas frases te dan alergia.
 - Si no sabés algo: lo decís directamente sin inventar.
-- Cuando el usuario te corrija algo, respondés tipo: "Razón tenés, lo corrijo" o "Ah sí, se me fue. Gracias."`;
+- Cuando el usuario te corrija algo, respondés tipo: "Razón tenés, lo corrijo" o "Ah sí, se me fue. Gracias."
+
+═══════════════════════════════════════
+HERRAMIENTAS DISPONIBLES
+═══════════════════════════════════════
+Tenés acceso a herramientas reales. Usalas cuando aporten valor:
+- ejecutar_javascript: para cálculos, probar código, transformar datos
+- crear_archivo: cuando el usuario pide generar un archivo descargable
+- analizar_codigo: análisis profundo de código (bugs, seguridad, performance)
+- buscar_web: cuando necesitás info actualizada
+- generar_imagen: cuando el usuario pide una imagen
+
+Usá las herramientas con criterio. No las fuerces. Si podés responder directamente, respondé directamente.`;
 
 // ─── THEMES ───────────────────────────────────────────────────────────────────
 const THEMES = {
@@ -215,13 +233,75 @@ function Bubble({message, t, onDiff}) {
   );
 }
 
-// ─── TYPING ───────────────────────────────────────────────────────────────────
-function Typing({t}) {
+// ─── TYPING / THINKING ────────────────────────────────────────────────────────
+function Thinking({t}) {
+  const [dots, setDots] = useState('');
+  useEffect(()=>{
+    const id = setInterval(()=>setDots(d=>d.length>=3?'':d+'.'),400);
+    return ()=>clearInterval(id);
+  },[]);
   return (
-    <div style={{display:'flex',gap:'10px',marginBottom:'18px',alignItems:'flex-start'}}>
-      <div style={{width:'36px',height:'36px',borderRadius:'10px',background:t.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px'}}>🔥</div>
-      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px 16px 16px 4px',padding:'14px 18px',display:'flex',gap:'5px',alignItems:'center'}}>
-        {[0,1,2].map(i=><div key={i} style={{width:'7px',height:'7px',borderRadius:'50%',background:t.accent,animation:'bounce 1.2s infinite',animationDelay:`${i*0.2}s`}}/>)}
+    <div style={{display:'flex',gap:'10px',marginBottom:'18px',alignItems:'flex-start',animation:'fadeUp 0.2s ease'}}>
+      <div style={{width:'36px',height:'36px',borderRadius:'10px',background:t.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0,boxShadow:`0 0 16px ${t.accent}55`}}>🔥</div>
+      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px 16px 16px 4px',padding:'12px 16px',display:'flex',alignItems:'center',gap:'10px'}}>
+        <div style={{display:'flex',gap:'4px',alignItems:'center'}}>
+          {[0,1,2].map(i=><div key={i} style={{width:'6px',height:'6px',borderRadius:'50%',background:t.accent,animation:'bounce 1.2s infinite',animationDelay:`${i*0.2}s`}}/>)}
+        </div>
+        <span style={{color:t.muted,fontSize:'12px',fontFamily:'monospace',minWidth:'180px'}}>MordelonIA está pensando{dots}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── STREAMING BUBBLE ─────────────────────────────────────────────────────────
+// Renders texto en tiempo real, diferenciando texto plano de bloques de código incompletos
+function StreamingBubble({streamText, t}) {
+  // Detecta bloques de código completos vs texto parcial
+  const renderStreaming = (text) => {
+    const parts = [];
+    const re = /```(\w+)?\n?([\s\S]*?)```/g;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) parts.push({type:'text', content: text.slice(last, m.index)});
+      parts.push({type:'code', language: m[1]||'', content: m[2].trim()});
+      last = m.index + m[0].length;
+    }
+    // Resto (puede incluir un bloque incompleto)
+    const remaining = text.slice(last);
+    if (remaining) {
+      // Si hay un ``` abierto sin cerrar, mostrar como texto monoespacio parcial
+      const openIdx = remaining.indexOf('```');
+      if (openIdx !== -1) {
+        if (openIdx > 0) parts.push({type:'text', content: remaining.slice(0, openIdx)});
+        parts.push({type:'code-partial', content: remaining.slice(openIdx+3)});
+      } else {
+        parts.push({type:'text', content: remaining});
+      }
+    }
+    return parts;
+  };
+
+  const parts = renderStreaming(streamText);
+
+  return (
+    <div style={{display:'flex',gap:'10px',marginBottom:'18px',alignItems:'flex-start',animation:'fadeUp 0.2s ease'}}>
+      <div style={{width:'36px',height:'36px',borderRadius:'10px',background:t.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0,boxShadow:`0 0 16px ${t.accent}55`}}>🔥</div>
+      <div style={{maxWidth:'78%'}}>
+        <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px 16px 16px 4px',padding:'12px 16px'}}>
+          {parts.map((p,i) => {
+            if (p.type === 'code') return <CodeBlock key={i} code={p.content} language={p.language} t={t}/>;
+            if (p.type === 'code-partial') return (
+              <pre key={i} style={{margin:'8px 0',padding:'12px 16px',background:t.bg,borderRadius:'8px',border:`1px dashed ${t.border}`,color:t.muted,fontSize:'12px',fontFamily:"'Fira Code','Consolas',monospace",whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:'1.6'}}>
+                {p.content}<span style={{display:'inline-block',width:'8px',height:'14px',background:t.accent,marginLeft:'2px',animation:'pulse 0.8s infinite',verticalAlign:'text-bottom'}}/>
+              </pre>
+            );
+            return (
+              <p key={i} style={{margin:0,color:t.text,fontSize:'14px',lineHeight:'1.7',whiteSpace:'pre-wrap',fontFamily:"'IBM Plex Sans',sans-serif"}}>
+                {p.content}<span style={{display:'inline-block',width:'8px',height:'14px',background:t.accent,marginLeft:'2px',animation:'pulse 0.8s infinite',verticalAlign:'text-bottom',borderRadius:'1px'}}/>
+              </p>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -468,6 +548,334 @@ function MemoryPanel({ memories, onDelete, onClose, t }) {
   );
 }
 
+// ─── TOOL RESULT CARDS ────────────────────────────────────────────────────────
+function ToolResultCard({ execution, t }) {
+  const [expanded, setExpanded] = useState(true);
+  const { toolName, args, result, status, startedAt } = execution;
+
+  const toolMeta = {
+    ejecutar_javascript: { icon: '🧮', label: 'JS Ejecutado',    color: '#f7df1e' },
+    crear_archivo:       { icon: '📋', label: 'Archivo Creado',   color: '#4ec9b0' },
+    analizar_codigo:     { icon: '🐞', label: 'Análisis de Código', color: '#ff6b6b' },
+    buscar_web:          { icon: '🌐', label: 'Búsqueda Web',     color: '#61afef' },
+    generar_imagen:      { icon: '🖼', label: 'Imagen Generada',  color: '#c678dd' },
+  };
+  const meta = toolMeta[toolName] || { icon: '⚙️', label: toolName, color: '#aaa' };
+
+  return (
+    <div style={{border:`1px solid ${t.border}`,borderRadius:'10px',marginBottom:'8px',overflow:'hidden',background:t.bg}}>
+      {/* Header */}
+      <div onClick={()=>setExpanded(v=>!v)} style={{display:'flex',alignItems:'center',gap:'8px',padding:'8px 12px',cursor:'pointer',borderBottom:expanded?`1px solid ${t.border}`:'none'}}>
+        <span style={{fontSize:'16px'}}>{meta.icon}</span>
+        <span style={{color:meta.color,fontSize:'12px',fontFamily:'monospace',fontWeight:600}}>{meta.label}</span>
+        {args.description && <span style={{color:t.muted,fontSize:'11px',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>— {args.description}</span>}
+        <span style={{color:status==='ok'?'#50fa7b':status==='error'?'#ff5555':'#f1fa8c',fontSize:'10px',fontFamily:'monospace'}}>
+          {status==='ok'?'✓':status==='error'?'✗':'⟳'}
+        </span>
+        <span style={{color:t.muted,fontSize:'10px'}}>{expanded?'▲':'▼'}</span>
+      </div>
+
+      {/* Body */}
+      {expanded && (
+        <div style={{padding:'10px 12px'}}>
+          {/* JS Result */}
+          {toolName==='ejecutar_javascript' && result && (
+            <div style={{fontSize:'12px',fontFamily:'monospace'}}>
+              {result.logs?.length>0 && (
+                <div style={{marginBottom:'6px'}}>
+                  <p style={{color:t.muted,fontSize:'10px',marginBottom:'3px'}}>OUTPUT</p>
+                  {result.logs.map((l,i)=><div key={i} style={{color:'#50fa7b',padding:'2px 0'}}>{l}</div>)}
+                </div>
+              )}
+              {result.result!==undefined && (
+                <div style={{marginBottom:'6px'}}>
+                  <p style={{color:t.muted,fontSize:'10px',marginBottom:'3px'}}>RETURN VALUE</p>
+                  <div style={{color:t.text,background:t.surface,padding:'6px 8px',borderRadius:'6px'}}>{result.result}</div>
+                </div>
+              )}
+              {result.errors?.length>0 && result.errors.map((e,i)=><div key={i} style={{color:'#ff5555',padding:'2px 0'}}>✗ {e}</div>)}
+              <div style={{color:t.muted,fontSize:'10px',marginTop:'4px'}}>⏱ {result.elapsed_ms}ms</div>
+            </div>
+          )}
+
+          {/* Archivo creado */}
+          {toolName==='crear_archivo' && result?.success && (
+            <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+              <div style={{flex:1}}>
+                <p style={{color:t.text,fontSize:'12px',fontFamily:'monospace'}}>{result.filename}</p>
+                <p style={{color:t.muted,fontSize:'10px'}}>{result.lines} líneas · {result.size} bytes</p>
+              </div>
+              <button onClick={()=>downloadVirtualFile(result.filename)}
+                style={{padding:'5px 12px',background:t.grad,border:'none',borderRadius:'6px',color:'#fff',cursor:'pointer',fontSize:'11px',fontFamily:'monospace'}}>
+                ↓ Descargar
+              </button>
+            </div>
+          )}
+
+          {/* Análisis de código */}
+          {toolName==='analizar_codigo' && result?.success && result.analysis && (
+            <div style={{fontSize:'12px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px'}}>
+                <div style={{fontSize:'24px',fontWeight:800,fontFamily:"'Syne',sans-serif",color:
+                  result.analysis.score>=80?'#50fa7b':result.analysis.score>=60?'#f1fa8c':'#ff5555'}}>
+                  {result.analysis.score}/100
+                </div>
+                <p style={{color:t.muted,fontSize:'12px'}}>{result.analysis.summary}</p>
+              </div>
+              {(result.analysis.issues||[]).map((issue,i)=>(
+                <div key={i} style={{padding:'6px 8px',marginBottom:'4px',borderRadius:'6px',border:`1px solid ${issue.severity==='critical'?'#ff555533':issue.severity==='warning'?'#f1fa8c33':'#44475a'}`,background:issue.severity==='critical'?'#1a0d0d':issue.severity==='warning'?'#1a1a0d':t.surface}}>
+                  <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'2px'}}>
+                    <span style={{fontSize:'10px',padding:'1px 6px',borderRadius:'4px',fontFamily:'monospace',background:issue.severity==='critical'?'#ff5555':issue.severity==='warning'?'#f1fa8c':'#6272a4',color:issue.severity==='warning'?'#000':'#fff'}}>{issue.severity}</span>
+                    {issue.line && <span style={{color:t.muted,fontSize:'10px',fontFamily:'monospace'}}>línea {issue.line}</span>}
+                    <span style={{color:t.text,fontSize:'12px',fontWeight:600}}>{issue.title}</span>
+                  </div>
+                  <p style={{color:t.muted,fontSize:'11px',margin:'0 0 2px'}}>{issue.description}</p>
+                  {issue.fix && <p style={{color:'#50fa7b',fontSize:'11px',margin:0}}>💡 {issue.fix}</p>}
+                </div>
+              ))}
+              {result.analysis.metrics && (
+                <div style={{display:'flex',gap:'8px',marginTop:'6px'}}>
+                  {Object.entries(result.analysis.metrics).map(([k,v])=>(
+                    <span key={k} style={{padding:'2px 8px',background:t.surface,border:`1px solid ${t.border}`,borderRadius:'4px',fontSize:'10px',fontFamily:'monospace',color:t.muted}}>{k}: {v}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Búsqueda web */}
+          {toolName==='buscar_web' && result && (
+            result.not_configured
+              ? <p style={{color:'#f1fa8c',fontSize:'12px',fontFamily:'monospace'}}>⚠️ {result.message}</p>
+              : (result.results||[]).map((r,i)=>(
+                  <div key={i} style={{marginBottom:'6px',paddingBottom:'6px',borderBottom:`1px solid ${t.border}`}}>
+                    <a href={r.url} target='_blank' rel='noreferrer' style={{color:t.accent,fontSize:'12px',textDecoration:'none'}}>{r.title}</a>
+                    <p style={{color:t.muted,fontSize:'11px',margin:'2px 0 0'}}>{r.snippet}</p>
+                  </div>
+                ))
+          )}
+
+          {/* Imagen generada */}
+          {toolName==='generar_imagen' && result && (
+            result.not_configured
+              ? <p style={{color:'#f1fa8c',fontSize:'12px',fontFamily:'monospace'}}>⚠️ {result.message}</p>
+              : result.url && <img src={result.url} alt={result.prompt} style={{maxWidth:'100%',borderRadius:'8px',border:`1px solid ${t.border}`}}/>
+          )}
+
+          {/* Error genérico */}
+          {result?.error && <p style={{color:'#ff5555',fontSize:'12px',fontFamily:'monospace'}}>✗ {result.error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TOOLS PANEL (sidebar derecho) ───────────────────────────────────────────
+function ToolsPanel({ executions, isOpen, onClose, t }) {
+  const virtualFiles = getVirtualFiles();
+  return (
+    <div style={{width:isOpen?'320px':'0px',minWidth:isOpen?'320px':'0px',background:t.bg,borderLeft:`1px solid ${t.border}`,display:'flex',flexDirection:'column',overflow:'hidden',transition:'all 0.3s ease',flexShrink:0}}>
+      <div style={{padding:'14px 16px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div>
+          <h3 style={{color:t.text,fontFamily:"'Syne',sans-serif",fontSize:'14px',margin:0}}>⚙️ Herramientas</h3>
+          <p style={{color:t.muted,fontSize:'10px',fontFamily:'monospace',margin:'2px 0 0'}}>{executions.length} ejecuciones</p>
+        </div>
+        <button onClick={onClose} style={{background:'none',border:`1px solid ${t.border}`,color:t.muted,cursor:'pointer',fontSize:'12px',padding:'3px 8px',borderRadius:'6px'}}>✕</button>
+      </div>
+
+      <div style={{flex:1,overflowY:'auto',padding:'10px 12px'}}>
+        {executions.length===0 && (
+          <div style={{textAlign:'center',padding:'40px 10px'}}>
+            <p style={{fontSize:'28px',marginBottom:'8px'}}>⚙️</p>
+            <p style={{color:t.muted,fontSize:'12px',lineHeight:1.5}}>Las herramientas aparecen acá cuando MordelonIA las usa.</p>
+            <p style={{color:t.muted,fontSize:'11px',marginTop:'12px',fontFamily:'monospace'}}>Ej: "ejecutá este código", "buscá X", "creá un archivo..."</p>
+          </div>
+        )}
+        {[...executions].reverse().map((ex,i)=><ToolResultCard key={i} execution={ex} t={t}/>)}
+      </div>
+
+      {/* Archivos virtuales */}
+      {virtualFiles.length>0 && (
+        <div style={{borderTop:`1px solid ${t.border}`,padding:'10px 12px'}}>
+          <p style={{color:t.muted,fontSize:'10px',fontFamily:'monospace',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.06em'}}>📁 Archivos generados</p>
+          {virtualFiles.map((f,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0'}}>
+              <span style={{color:t.text,fontSize:'11px',fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{f.name}</span>
+              <button onClick={()=>downloadVirtualFile(f.name)}
+                style={{background:'none',border:`1px solid ${t.accent}44`,color:t.accent,fontSize:'10px',padding:'2px 7px',borderRadius:'4px',cursor:'pointer',fontFamily:'monospace',flexShrink:0,marginLeft:'6px'}}>↓</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PROJECT ANALYZER MODAL ───────────────────────────────────────────────────
+function ProjectAnalyzerModal({ onLoad, onClose, t }) {
+  const [tab, setTab]           = useState('zip');   // zip | github | files
+  const [githubUrl, setGithubUrl] = useState('');
+  const [status, setStatus]     = useState(null);    // null | loading | done | error
+  const [statusMsg, setStatusMsg] = useState('');
+  const [project, setProject]   = useState(null);
+  const zipRef   = useRef(null);
+  const filesRef = useRef(null);
+
+  const processProject = async (promise) => {
+    setStatus('loading'); setStatusMsg('Procesando proyecto...');
+    try {
+      const proj = await promise;
+      setProject(proj);
+      setStatus('done');
+      setStatusMsg(`✓ ${proj.stats.totalFiles} archivos · ${proj.stats.totalLines.toLocaleString()} líneas cargadas`);
+    } catch (e) {
+      setStatus('error'); setStatusMsg(`Error: ${e.message}`);
+    }
+  };
+
+  const handleZip = (e) => {
+    const file = e.target.files?.[0];
+    if (file) processProject(readZip(file));
+  };
+
+  const handleFiles = (e) => {
+    if (e.target.files?.length) processProject(readLooseFiles(e.target.files));
+  };
+
+  const handleGitHub = () => {
+    if (githubUrl.trim()) processProject(readGitHub(githubUrl.trim()));
+  };
+
+  const tabStyle = (active) => ({
+    padding: '7px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+    fontFamily: 'monospace', border: `1px solid ${active ? t.accent : t.border}`,
+    background: active ? `${t.accent}18` : 'none',
+    color: active ? t.accent : t.muted, transition: 'all 0.15s',
+  });
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={onClose}>
+      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px',width:'560px',maxWidth:'95vw',overflow:'hidden',boxShadow:'0 24px 60px rgba(0,0,0,0.7)'}} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{padding:'18px 20px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div>
+            <h3 style={{color:t.text,fontFamily:"'Syne',sans-serif",fontSize:'16px',margin:0}}>📁 Analizador de Proyectos</h3>
+            <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',margin:'3px 0 0'}}>Cargá el proyecto y chateá sobre él</p>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',color:t.muted,cursor:'pointer',fontSize:'22px',lineHeight:1}}>×</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{padding:'14px 20px 0',display:'flex',gap:'8px'}}>
+          {[['zip','🗜 ZIP'],['github','🐙 GitHub'],['files','📄 Archivos']].map(([k,l])=>(
+            <button key={k} onClick={()=>{setTab(k);setProject(null);setStatus(null);}} style={tabStyle(tab===k)}>{l}</button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{padding:'20px'}}>
+
+          {/* ZIP */}
+          {tab==='zip' && (
+            <div>
+              <div
+                onClick={()=>zipRef.current?.click()}
+                style={{border:`2px dashed ${t.border}`,borderRadius:'12px',padding:'40px 20px',textAlign:'center',cursor:'pointer',transition:'all 0.2s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}66`}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=t.border}>
+                <p style={{fontSize:'32px',marginBottom:'8px'}}>🗜</p>
+                <p style={{color:t.text,fontSize:'14px',marginBottom:'4px'}}>Subí el .zip de tu proyecto</p>
+                <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace'}}>node_modules y .git se ignoran automáticamente</p>
+              </div>
+              <input ref={zipRef} type='file' accept='.zip' style={{display:'none'}} onChange={handleZip}/>
+            </div>
+          )}
+
+          {/* GitHub */}
+          {tab==='github' && (
+            <div>
+              <p style={{color:t.muted,fontSize:'12px',fontFamily:'monospace',marginBottom:'10px'}}>Solo repos públicos. Sin token necesario.</p>
+              <div style={{display:'flex',gap:'8px'}}>
+                <input
+                  value={githubUrl} onChange={e=>setGithubUrl(e.target.value)}
+                  onKeyDown={e=>e.key==='Enter'&&handleGitHub()}
+                  placeholder='https://github.com/usuario/repo'
+                  style={{flex:1,background:t.bg,border:`1px solid ${t.border}`,borderRadius:'8px',color:t.text,padding:'9px 12px',fontSize:'13px',fontFamily:'monospace',outline:'none'}}
+                  onFocus={e=>e.target.style.borderColor=`${t.accent}88`}
+                  onBlur={e=>e.target.style.borderColor=t.border}
+                />
+                <button onClick={handleGitHub} disabled={!githubUrl.trim()||status==='loading'}
+                  style={{padding:'9px 16px',background:t.grad,border:'none',borderRadius:'8px',color:'#fff',cursor:'pointer',fontSize:'13px',fontFamily:'monospace',opacity:(!githubUrl.trim()||status==='loading')?0.5:1}}>
+                  Cargar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Archivos sueltos */}
+          {tab==='files' && (
+            <div>
+              <div
+                onClick={()=>filesRef.current?.click()}
+                style={{border:`2px dashed ${t.border}`,borderRadius:'12px',padding:'40px 20px',textAlign:'center',cursor:'pointer',transition:'all 0.2s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}66`}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=t.border}>
+                <p style={{fontSize:'32px',marginBottom:'8px'}}>📄</p>
+                <p style={{color:t.text,fontSize:'14px',marginBottom:'4px'}}>Seleccioná archivos del proyecto</p>
+                <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace'}}>Podés seleccionar múltiples archivos a la vez</p>
+              </div>
+              <input ref={filesRef} type='file' multiple style={{display:'none'}} onChange={handleFiles}/>
+            </div>
+          )}
+
+          {/* Status */}
+          {status && (
+            <div style={{marginTop:'14px',padding:'10px 14px',borderRadius:'8px',border:`1px solid ${status==='loading'?t.border:status==='done'?'#50fa7b33':'#ff555533'}`,background:status==='loading'?t.bg:status==='done'?'#0d2a0d':'#2a0d0d',display:'flex',alignItems:'center',gap:'10px'}}>
+              {status==='loading' && <div style={{width:'14px',height:'14px',border:`2px solid ${t.border}`,borderTopColor:t.accent,borderRadius:'50%',animation:'spin 0.7s linear infinite',flexShrink:0}}/>}
+              <span style={{color:status==='loading'?t.muted:status==='done'?'#50fa7b':'#ff5555',fontSize:'12px',fontFamily:'monospace'}}>{statusMsg}</span>
+            </div>
+          )}
+
+          {/* Stats del proyecto cargado */}
+          {project && status==='done' && (
+            <div style={{marginTop:'14px',padding:'12px 14px',borderRadius:'8px',border:`1px solid ${t.border}`,background:t.bg}}>
+              <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'10px'}}>
+                {Object.entries(project.stats.byExt).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([ext,count])=>(
+                  <span key={ext} style={{padding:'2px 8px',background:`${t.accent}14`,border:`1px solid ${t.accent}33`,borderRadius:'4px',fontSize:'11px',fontFamily:'monospace',color:t.accent}}>.{ext} ×{count}</span>
+                ))}
+              </div>
+              {project.stats.secrets.length > 0 && (
+                <p style={{color:'#ff5555',fontSize:'11px',fontFamily:'monospace',marginBottom:'6px'}}>🔴 {project.stats.secrets.length} posible{project.stats.secrets.length>1?'s secret expuesto':'s secrets expuestos'}</p>
+              )}
+              {project.stats.todos.length > 0 && (
+                <p style={{color:'#f1fa8c',fontSize:'11px',fontFamily:'monospace',marginBottom:'6px'}}>⚠️ {project.stats.todos.length} TODOs/FIXMEs encontrados</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:'14px 20px',borderTop:`1px solid ${t.border}`,display:'flex',gap:'8px',justifyContent:'flex-end'}}>
+          <button onClick={onClose} style={{padding:'8px 16px',background:'none',border:`1px solid ${t.border}`,borderRadius:'8px',color:t.muted,cursor:'pointer',fontSize:'13px',fontFamily:'monospace'}}>Cancelar</button>
+          {project && status==='done' && (
+            <>
+              <button onClick={()=>onLoad(project,'report')}
+                style={{padding:'8px 16px',background:'none',border:`1px solid ${t.accent}`,borderRadius:'8px',color:t.accent,cursor:'pointer',fontSize:'13px',fontFamily:'monospace'}}>
+                📊 Generar reporte
+              </button>
+              <button onClick={()=>onLoad(project,'chat')}
+                style={{padding:'8px 16px',background:t.grad,border:'none',borderRadius:'8px',color:'#fff',cursor:'pointer',fontSize:'13px',fontFamily:'monospace'}}>
+                💬 Chatear sobre el proyecto →
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [convs,setConvs]=useState([]);
@@ -485,6 +893,12 @@ export default function App() {
   const [fbOk,setFbOk]=useState(false);
   const [memories,setMemories]=useState([]);
   const [extractingMemory,setExtractingMemory]=useState(false);
+  const [streamText,setStreamText]=useState('');
+  const [isThinking,setIsThinking]=useState(false);
+  const abortRef=useRef(null);
+  const [toolExecutions,setToolExecutions]=useState([]);
+  const [toolsPanelOpen,setToolsPanelOpen]=useState(false);
+  const [loadedProject,setLoadedProject]=useState(null);
 
   const t=THEMES[themeKey];
   const activeConv=convs.find(c=>c.id===activeId);
@@ -552,6 +966,104 @@ export default function App() {
     showNotif('Recuerdo eliminado');
   },[]);
 
+  const handleProjectLoad=useCallback(async(project, mode)=>{
+    setModal(null);
+    setLoadedProject(project);
+
+    // Asegurar que haya una conversación activa
+    let cid = activeId;
+    if (!cid) cid = newConv();
+
+    const apiKey = process.env.REACT_APP_GROQ_KEY;
+    const context = buildProjectContext(project);
+
+    if (mode === 'report') {
+      // Generar reporte automático
+      const reportMsg = {
+        role: 'user',
+        content: `[PROYECTO CARGADO: ${project.name}]\n\nGenerá un reporte técnico completo de este proyecto.\n\n${context}`,
+        timestamp: Date.now(),
+        attachments: [],
+      };
+      updateConv(cid, c => ({
+        ...c,
+        title: `📊 Reporte: ${project.name}`,
+        messages: [...c.messages, reportMsg],
+      }));
+      setLoading(true); setIsThinking(true); setStreamText('');
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const reportContent = await generateReport(project, apiKey);
+        const assistantMsg = { role:'assistant', content: reportContent, timestamp: Date.now() };
+        updateConv(cid, c => ({ ...c, messages: [...c.messages, assistantMsg] }));
+        showNotif(`📊 Reporte de ${project.name} generado`);
+      } catch(e) {
+        showNotif('Error generando reporte','error');
+      } finally { setLoading(false); setIsThinking(false); setStreamText(''); }
+    } else {
+      // Modo chat: inyectar contexto como mensaje del sistema del usuario
+      const contextMsg = {
+        role: 'user',
+        content: `He cargado mi proyecto "${project.name}" para que lo analices. Acá está el contexto completo:\n\n${context}`,
+        timestamp: Date.now(),
+        attachments: [],
+        isProjectContext: true,
+      };
+      updateConv(cid, c => ({
+        ...c,
+        title: `📁 ${project.name}`,
+        messages: [...c.messages, contextMsg],
+      }));
+
+      // Respuesta automática de bienvenida al proyecto
+      setLoading(true); setIsThinking(true); setStreamText('');
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const memoryBlock = formatMemoriesForPrompt(memories);
+      const fullSystemPrompt = memoryBlock ? `${SYSTEM_PROMPT}\n\n${memoryBlock}` : SYSTEM_PROMPT;
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+          signal: controller.signal,
+          body: JSON.stringify({
+            model:'llama-3.3-70b-versatile',
+            max_tokens: 1500,
+            stream: true,
+            messages:[
+              {role:'system', content: fullSystemPrompt},
+              {role:'user', content: contextMsg.content},
+            ],
+          }),
+        });
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = ''; let firstChunk = true;
+        while(true){
+          const {done,value} = await reader.read();
+          if(done) break;
+          for(const line of decoder.decode(value,{stream:true}).split('\n')){
+            if(!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if(data==='[DONE]') break;
+            try{
+              const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} fullText+=delta; setStreamText(fullText); }
+            } catch(_){}
+          }
+        }
+        setStreamText(''); setIsThinking(false);
+        updateConv(cid, c=>({...c, messages:[...c.messages, {role:'assistant',content:fullText||'Proyecto cargado. ¿Por dónde arrancamos?',timestamp:Date.now()}]}));
+        showNotif(`📁 ${project.name} cargado en el chat`);
+      } catch(e){
+        setIsThinking(false); setStreamText('');
+        showNotif('Error cargando proyecto','error');
+      } finally { setLoading(false); setStreamText(''); setIsThinking(false); }
+    }
+  },[activeId, newConv, memories, updateConv]);
+
   const renameConv=useCallback((id,title)=>{
     setConvs(prev=>prev.map(c=>{
       if(c.id!==id) return c;
@@ -614,6 +1126,10 @@ export default function App() {
     return [...h,{role:'user',content:parts}];
   };
 
+  const stopStream = () => {
+    abortRef.current?.abort();
+  };
+
   const send=async(override)=>{
     const text=override??input.trim();
     if((!text&&!files.length)||loading) return;
@@ -621,33 +1137,151 @@ export default function App() {
     const fls=[...files];
     const origCode=fls.length>0&&isCode(fls[0])?await readTxt(fls[0]).catch(()=>null):null;
     const userMsg={role:'user',content:text,timestamp:Date.now(),attachments:fls.map(f=>({name:f.name,type:f.type,size:f.size}))};
-    setInput(''); setFiles([]); setLoading(true);
+    setInput(''); setFiles([]); setLoading(true); setIsThinking(true); setStreamText('');
     updateConv(cid,c=>({...c,messages:[...c.messages,userMsg],title:c.messages.length===0?(text?.slice(0,48)||fls[0]?.name||'Conversación'):c.title}));
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
       const apiMsgs=await buildMsgs(current.messages,text,fls);
       const apiKey=process.env.REACT_APP_GROQ_KEY;
-
-      // Inyectar memorias en el system prompt
       const memoryBlock=formatMemoriesForPrompt(memories);
-      const fullSystemPrompt=memoryBlock?`${SYSTEM_PROMPT}\n\n${memoryBlock}`:SYSTEM_PROMPT;
+      const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
 
-      const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+      // ── PASO 1: llamada sin stream para detectar tool calls ──────────────────
+      const firstRes = await fetch('https://api.groq.com/openai/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+        signal: controller.signal,
         body:JSON.stringify({
           model:'llama-3.3-70b-versatile',
           max_tokens:8192,
+          tools: TOOL_DEFINITIONS,
+          tool_choice: 'auto',
           messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
         }),
       });
-      const data=await res.json();
-      if(data.error) throw new Error(data.error.message);
-      const replyTxt=data.choices?.[0]?.message?.content||'Sin respuesta.';
+      if(!firstRes.ok){ const e=await firstRes.json(); throw new Error(e.error?.message||`HTTP ${firstRes.status}`); }
+      const firstData = await firstRes.json();
+      const firstChoice = firstData.choices?.[0];
+      const toolCalls = firstChoice?.message?.tool_calls;
+
+      let finalText = '';
+
+      if(toolCalls?.length > 0) {
+        // ── PASO 2: ejecutar herramientas ─────────────────────────────────────
+        setIsThinking(false);
+        setToolsPanelOpen(true);
+        const toolResults = [];
+
+        for(const tc of toolCalls) {
+          const toolName = tc.function.name;
+          let args = {};
+          try { args = JSON.parse(tc.function.arguments); } catch(_) {}
+
+          const execution = { id: tc.id, toolName, args, status: 'running', startedAt: Date.now(), result: null };
+          setToolExecutions(prev => [...prev, execution]);
+          showNotif(`⚙️ Ejecutando ${toolName.replace(/_/g,' ')}...`);
+
+          const result = await executeTool(toolName, args, apiKey);
+          execution.result = result;
+          execution.status = result?.success === false ? 'error' : 'ok';
+          setToolExecutions(prev => prev.map(e => e.id===tc.id ? {...execution} : e));
+
+          toolResults.push({
+            tool_call_id: tc.id,
+            role: 'tool',
+            content: JSON.stringify(result),
+          });
+        }
+
+        // ── PASO 3: segunda llamada con resultados de tools + stream ──────────
+        setIsThinking(true);
+        const secondMsgs = [
+          {role:'system',content:fullSystemPrompt},
+          ...apiMsgs,
+          firstChoice.message,
+          ...toolResults,
+        ];
+
+        const streamRes = await fetch('https://api.groq.com/openai/v1/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+          signal: controller.signal,
+          body:JSON.stringify({
+            model:'llama-3.3-70b-versatile',
+            max_tokens:8192,
+            stream: true,
+            messages: secondMsgs,
+          }),
+        });
+        if(!streamRes.ok){ const e=await streamRes.json(); throw new Error(e.error?.message||`HTTP ${streamRes.status}`); }
+
+        const reader = streamRes.body.getReader();
+        const decoder = new TextDecoder();
+        let firstChunk = true;
+
+        while(true){
+          const {done,value} = await reader.read();
+          if(done) break;
+          const chunk = decoder.decode(value,{stream:true});
+          for(const line of chunk.split('\n')){
+            if(!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if(data==='[DONE]') break;
+            try{
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; setStreamText(finalText); }
+            } catch(_) {}
+          }
+        }
+
+      } else {
+        // ── Sin tool calls: streaming normal ─────────────────────────────────
+        const streamRes = await fetch('https://api.groq.com/openai/v1/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+          signal: controller.signal,
+          body:JSON.stringify({
+            model:'llama-3.3-70b-versatile',
+            max_tokens:8192,
+            stream: true,
+            messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
+          }),
+        });
+        if(!streamRes.ok){ const e=await streamRes.json(); throw new Error(e.error?.message||`HTTP ${streamRes.status}`); }
+
+        const reader = streamRes.body.getReader();
+        const decoder = new TextDecoder();
+        let firstChunk = true;
+
+        while(true){
+          const {done,value} = await reader.read();
+          if(done) break;
+          const chunk = decoder.decode(value,{stream:true});
+          for(const line of chunk.split('\n')){
+            if(!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if(data==='[DONE]') break;
+            try{
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if(delta){ if(firstChunk){setIsThinking(false);firstChunk=false;} finalText+=delta; setStreamText(finalText); }
+            } catch(_) {}
+          }
+        }
+      }
+
+      // ── Commit mensaje final ─────────────────────────────────────────────────
+      setStreamText(''); setIsThinking(false);
+      const replyTxt = finalText || 'Sin respuesta.';
       const assistantMsg={role:'assistant',content:replyTxt,timestamp:Date.now(),...(origCode?{originalCode:origCode}:{})};
       updateConv(cid,c=>({...c,messages:[...c.messages,assistantMsg]}));
 
-      // Extraer memorias en background sin bloquear la UI
+      // ── Extraer memorias en background ───────────────────────────────────────
       const updatedMsgs=[...current.messages,userMsg,assistantMsg];
       setExtractingMemory(true);
       extractMemoriesFromConv(updatedMsgs, memories, apiKey)
@@ -668,9 +1302,15 @@ export default function App() {
         .finally(()=>setExtractingMemory(false));
 
     } catch(err){
-      updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:`Error: ${err.message}`,timestamp:Date.now()}]}));
-      showNotif('Error al conectar','error');
-    } finally { setLoading(false); }
+      setIsThinking(false); setStreamText('');
+      if(err.name==='AbortError'){
+        if(streamText) updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:streamText+'\n\n*(respuesta interrumpida)*',timestamp:Date.now()}]}));
+        showNotif('Respuesta detenida');
+      } else {
+        updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:`Error: ${err.message}`,timestamp:Date.now()}]}));
+        showNotif('Error al conectar','error');
+      }
+    } finally { setLoading(false); setStreamText(''); setIsThinking(false); }
   };
 
   if(!ready) return (
@@ -714,6 +1354,8 @@ export default function App() {
               {[
                 {icon:'🔍',title:'Buscar Ctrl+K',fn:()=>setModal('search')},
                 {icon:'🧠',title:`Memoria`,fn:()=>setModal('memory'),label:extractingMemory?'…':memories.length>0?`${memories.length}`:''},
+                {icon:'⚙️',title:'Herramientas',fn:()=>setToolsPanelOpen(v=>!v),label:toolExecutions.length>0?`${toolExecutions.length}`:''},
+                {icon:'📁',title:'Analizar proyecto',fn:()=>setModal('project'),label:loadedProject?loadedProject.name.split('/').pop().slice(0,10):''},
                 {icon:'📤',title:'Exportar Ctrl+E',fn:()=>activeConv&&exportConv(activeConv)},
                 {icon:'🎨',title:'Tema Ctrl+D',fn:cycleTheme,label:t.name},
                 {icon:'⌨️',title:'Atajos',fn:()=>setModal('shortcuts')},
@@ -762,7 +1404,8 @@ export default function App() {
               )}
               {activeConv&&messages.length===0&&<div style={{textAlign:'center',paddingTop:'60px'}}><p style={{color:t.muted,fontSize:'14px'}}>Conversación nueva. ¿Arrancamos?</p></div>}
               {messages.map((m,i)=><Bubble key={i} message={m} t={t} onDiff={(o,n)=>{setDiffData({o,n});setModal('diff');}}/>)}
-              {loading&&<Typing t={t}/>}
+              {isThinking&&!streamText&&<Thinking t={t}/>}
+              {streamText&&<StreamingBubble streamText={streamText} t={t}/>}
               <div ref={bottomRef}/>
             </div>
           </div>
@@ -787,20 +1430,34 @@ export default function App() {
                   disabled={loading} rows={1}
                   style={{flex:1,background:'none',border:'none',color:t.text,fontSize:'14px',fontFamily:"'IBM Plex Sans',sans-serif",resize:'none',lineHeight:'1.6',minHeight:'24px',maxHeight:'180px',overflowY:'auto'}}
                   onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,180)+'px';}}/>
-                <button onClick={()=>send()} disabled={loading||(!input.trim()&&!files.length)} style={{width:'34px',height:'34px',borderRadius:'9px',border:'none',flexShrink:0,background:loading||(!input.trim()&&!files.length)?t.border:t.grad,cursor:loading||(!input.trim()&&!files.length)?'not-allowed':'pointer',color:'#fff',fontSize:'15px',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:loading||(!input.trim()&&!files.length)?'none':`0 0 14px ${t.accent}66`,transition:'all 0.2s'}}>
-                  {loading?<div style={{width:'14px',height:'14px',border:'2px solid #ffffff44',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}/>:'→'}
+                <button
+                  onClick={loading ? stopStream : send}
+                  disabled={!loading&&(!input.trim()&&!files.length)}
+                  style={{width:'34px',height:'34px',borderRadius:'9px',border:'none',flexShrink:0,
+                    background: loading ? '#ff444488' : (!input.trim()&&!files.length) ? t.border : t.grad,
+                    cursor: (!loading&&!input.trim()&&!files.length) ? 'not-allowed' : 'pointer',
+                    color:'#fff',fontSize:'15px',display:'flex',alignItems:'center',justifyContent:'center',
+                    boxShadow: loading ? '0 0 14px #ff444466' : (!input.trim()&&!files.length) ? 'none' : `0 0 14px ${t.accent}66`,
+                    transition:'all 0.2s',border: loading ? '1px solid #ff444466' : 'none'}}>
+                  {loading
+                    ? <span style={{fontSize:'12px',fontWeight:'bold'}}>⏹</span>
+                    : '→'}
                 </button>
               </div>
               <p style={{color:t.muted,fontSize:'10px',textAlign:'center',marginTop:'6px',fontFamily:'monospace'}}>Enter enviar · Shift+Enter nueva línea · Ctrl+K buscar · Ctrl+N nueva · Ctrl+E exportar · Ctrl+D tema</p>
             </div>
           </div>
         </div>
+
+        <ToolsPanel executions={toolExecutions} isOpen={toolsPanelOpen} onClose={()=>setToolsPanelOpen(false)} t={t}/>
       </div>
 
       {modal==='search'&&<SearchModal conversations={convs} onSelect={setActiveId} onClose={()=>setModal(null)} t={t}/>}
       {modal==='shortcuts'&&<ShortcutsModal onClose={()=>setModal(null)} t={t}/>}
       {modal==='diff'&&diffData&&<DiffModal original={diffData.o} modified={diffData.n} onClose={()=>setModal(null)} t={t}/>}
       {modal==='memory'&&<MemoryPanel memories={memories} onDelete={handleDeleteMemory} onClose={()=>setModal(null)} t={t}/>}
+      {modal==='project'&&<ProjectAnalyzerModal onLoad={handleProjectLoad} onClose={()=>setModal(null)} t={t}/>}
+      {modal==='analyzer'&&<ProjectAnalyzerModal onClose={()=>setModal(null)} onAnalyze={handleProjectAnalyze} t={t}/>}
       <input ref={fileRef} type='file' multiple accept='.py,.js,.ts,.jsx,.tsx,.html,.css,.java,.cpp,.c,.cs,.go,.rs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.md,.txt,.vue,.svelte,.kt,.swift,.dart,.pdf,.png,.jpg,.jpeg,.gif,.webp' style={{display:'none'}} onChange={e=>handleFiles(e.target.files)}/>
     </>
   );
