@@ -9,6 +9,28 @@ export const LARGE_FILE_THRESHOLD = 25000; // umbral para activar modo chunks
 
 const getExt = (n) => n.split('.').pop().toLowerCase();
 
+// Delay entre requests para no saturar el rate limit
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const INTER_CHUNK_DELAY = 3000; // 3s entre chunks
+
+// Wrapper con retry automático para 429
+const fetchWithRetry = async (claudeFetch, body, signal, retries = 4) => {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await claudeFetch(body, signal);
+    if (res.status !== 429) return res;
+    if (attempt === retries) return res;
+    let waitMs = (attempt + 1) * 8000; // backoff: 8s, 16s, 24s, 32s
+    try {
+      const errData = await res.clone().json();
+      const msg = errData?.error?.message || '';
+      const match = msg.match(/try again in ([\d.]+)s/i);
+      if (match) waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000;
+    } catch (_) {}
+    console.warn(`[chunkProcessor] Rate limit, reintentando en ${Math.round(waitMs / 1000)}s...`);
+    await sleep(waitMs);
+  }
+};
+
 /**
  * analyzeAndEditLargeFile
  *
@@ -51,7 +73,7 @@ export const analyzeAndEditLargeFile = async ({
   for (let i = 0; i < chunks.length; i++) {
     onStream(`📄 Leyendo parte ${i + 1}/${totalChunks}...\n`, false);
 
-    const res = await claudeFetch({
+    const res = await fetchWithRetry(claudeFetch, {
       model: MODEL_SMART,
       max_tokens: 1500,
       system: `Sos un analizador de código experto. Tu trabajo es leer un fragmento de un archivo y extraer un mapa estructural detallado: qué funciones/clases/secciones hay, qué IDs/clases CSS existen, qué hace cada parte. Sé específico y técnico. Responde SOLO con el análisis estructural, sin explicaciones extras.`,
@@ -73,12 +95,14 @@ export const analyzeAndEditLargeFile = async ({
       `=== PARTE ${i + 1}/${totalChunks} ` +
       `(chars ${i * CHUNK_SIZE}–${Math.min((i + 1) * CHUNK_SIZE, fileContent.length)}) ===\n${summary}`
     );
+    // Pausa entre chunks para no saturar el rate limit
+    if (i < chunks.length - 1) await sleep(INTER_CHUNK_DELAY);
   }
 
   // ── FASE 2: Consolidar mapa unificado del archivo completo ────────────────
   onStream(`\n🧠 Consolidando análisis completo...\n`, false);
 
-  const consolidateRes = await claudeFetch({
+  const consolidateRes = await fetchWithRetry(claudeFetch, {
     model: MODEL_SMART,
     max_tokens: 3000,
     system:
@@ -116,7 +140,7 @@ export const analyzeAndEditLargeFile = async ({
       `⚠️ Archivo demasiado grande para incluir completo. ` +
       `Usá el mapa para razonar los cambios. Generá el código completo y correcto basándote en él.`;
 
-  const editRes = await claudeFetch({
+  const editRes = await fetchWithRetry(claudeFetch, {
     model: MODEL_SMART,
     max_tokens: 8192,
     stream: true,

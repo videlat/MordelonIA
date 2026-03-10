@@ -16,13 +16,28 @@ import {
 
 // ─── CLAUDE FETCH ────────────────────────────────────────────────────────────
 // Llama al proxy serverless /api/claude para evitar CORS
-const claudeFetch = async (body, signal) => {
-  return fetch('/api/claude', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify(body),
-  });
+// Con retry automático en caso de rate limit (429)
+const claudeFetch = async (body, signal, retries = 4) => {
+  for(let attempt = 0; attempt <= retries; attempt++){
+    const res = await fetch('/api/claude', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify(body),
+    });
+    if(res.status !== 429) return res;
+    if(attempt === retries) return res; // último intento, devolver el error
+    // Calcular tiempo de espera desde el header o desde el mensaje
+    let waitMs = (attempt + 1) * 8000; // backoff base: 8s, 16s, 24s, 32s
+    try {
+      const errData = await res.clone().json();
+      const msg = errData?.error?.message || '';
+      const match = msg.match(/try again in ([\d.]+)s/i);
+      if(match) waitMs = Math.ceil(parseFloat(match[1]) * 1000) + 2000;
+    } catch(_) {}
+    console.warn(`[claudeFetch] Rate limit, reintentando en ${Math.round(waitMs/1000)}s...`);
+    await new Promise(r => setTimeout(r, waitMs));
+  }
 };
 
 // Modelos
