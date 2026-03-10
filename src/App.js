@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { saveConversation, loadConversations, deleteConversation as fbDelete } from './firebase';
+import { analyzeAndEditLargeFile, LARGE_FILE_THRESHOLD } from './chunkProcessor';
 import {
   saveMemory, loadMemories, deleteMemory,
   extractMemoriesFromConv, formatMemoriesForPrompt,
@@ -1030,13 +1031,13 @@ export default function App() {
   };
 
   const buildMsgs=async(history,text,fls)=>{
-    // Máximo 12 mensajes de historial para no superar el límite de tokens
-    const trimmed = history.slice(-12);
+    // Máximo 6 mensajes de historial y contenido truncado agresivamente
+    const trimmed = history.slice(-6);
     const h=trimmed.map(m=>({
       role:m.role,
-      content:typeof m.content==='string'?m.content.slice(0,6000):
-        Array.isArray(m.content)?m.content.map(b=>b.type==='text'?b.text:'[archivo]').join('\n').slice(0,6000):
-        String(m.content).slice(0,6000)
+      content:typeof m.content==='string'?m.content.slice(0,2000):
+        Array.isArray(m.content)?m.content.map(b=>b.type==='text'?b.text:'[archivo]').join('\n').slice(0,2000):
+        String(m.content).slice(0,2000)
     }));
     if(!fls.length) return [...h,{role:'user',content:text||''}];
     const parts=[];
@@ -1049,7 +1050,8 @@ export default function App() {
         parts.push({type:'text',text:`[PDF adjunto: ${f.name} - ${(f.size/1024).toFixed(1)}KB. El usuario subió este PDF.]`});
       } else if(isCode(f)){
         const tx=await readTxt(f);
-        parts.push({type:'text',text:`ARCHIVO ORIGINAL (${f.name}) — ESTE ES EL CONTENIDO EXACTO QUE DEBE SER LA BASE DE CUALQUIER MODIFICACIÓN. NO reescribir desde cero, NO cambiar IDs, NO cambiar estructura. Solo modificar lo que el usuario pida explícitamente:\n\`\`\`${getExt(f.name)}\n${tx}\n\`\`\``});
+        const txTruncated = tx.length > 40000 ? tx.slice(0, 40000) + '\n... [archivo truncado, continúa]' : tx;
+        parts.push({type:'text',text:`ARCHIVO ORIGINAL (${f.name}) — ESTE ES EL CONTENIDO EXACTO QUE DEBE SER LA BASE DE CUALQUIER MODIFICACIÓN. NO reescribir desde cero, NO cambiar IDs, NO cambiar estructura. Solo modificar lo que el usuario pida explícitamente:\n\`\`\`${getExt(f.name)}\n${txTruncated}\n\`\`\``});
       }
     }
     if(text) parts.push({type:'text',text});
@@ -1075,6 +1077,47 @@ export default function App() {
 
     try {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
+
+      // ── MODO CHUNKS: archivo grande → análisis multi-fase ──────────────────
+      const largeCodeFile = fls.find(f => isCode(f));
+      if(largeCodeFile){
+        const largeContent = await readTxt(largeCodeFile).catch(()=>null);
+        if(largeContent && largeContent.length > LARGE_FILE_THRESHOLD){
+          setIsThinking(false);
+          let accumulated = '';
+          const memBlockChunk = formatMemoriesForPrompt(memories);
+          const sysPromptChunk = [SYSTEM_PROMPT, memBlockChunk||null].filter(Boolean).join('\n\n');
+          const finalText = await analyzeAndEditLargeFile({
+            fileName: largeCodeFile.name,
+            fileContent: largeContent,
+            userRequest: text || '(sin instrucción específica)',
+            history: current.messages,
+            systemPrompt: sysPromptChunk,
+            claudeFetch,
+            MODEL_SMART,
+            signal: controller.signal,
+            onStream: (delta, isStream) => {
+              if(isStream){
+                accumulated += delta;
+                streamTextRef.current = accumulated;
+                setStreamText(accumulated);
+              } else {
+                // mensajes de progreso
+                accumulated += delta;
+                streamTextRef.current = accumulated;
+                setStreamText(accumulated);
+              }
+            }
+          });
+          const assistantMsg={role:'assistant',content:finalText,timestamp:Date.now(),model:MODEL_SMART};
+          updateConv(cid,c=>({...c,messages:[...c.messages,assistantMsg]}));
+          setStreamText(''); streamTextRef.current='';
+          setLoading(false); setIsThinking(false);
+          return;
+        }
+      }
+      // ── FIN MODO CHUNKS ────────────────────────────────────────────────────
+
       const apiMsgs=await buildMsgs(current.messages,text,fls);
       const memoryBlock=formatMemoriesForPrompt(memories);
       const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
