@@ -1365,7 +1365,7 @@ export default function App() {
           <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t} isMobile={isMobile}/>
         </div>
 
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'clip',minWidth:0,minHeight:0}}>
+        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'clip',minWidth:0,minHeight:0,height:'100dvh'}}>
           {/* HEADER */}
           <div style={{padding: isMobile ? '10px 12px' : '12px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:t.bg,flexShrink:0}}>
             {!isMobile && <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>}
@@ -1400,7 +1400,7 @@ export default function App() {
           {notif&&<div style={{position:'fixed',top:'68px',right:'16px',padding:'10px 16px',background:notif.type==='error'?'#2a0d0d':t.surface,border:`1px solid ${notif.type==='error'?'#ff5555':t.accent}`,borderRadius:'10px',color:notif.type==='error'?'#ff5555':t.accent,fontSize:'12px',zIndex:100,fontFamily:'monospace',animation:'fadeUp 0.2s ease'}}>{notif.msg}</div>}
 
           {/* MESSAGES */}
-          <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',overscrollBehavior:'contain',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
+          <div style={{flex:1,height:0,overflowY:'auto',WebkitOverflowScrolling:'touch',overscrollBehavior:'contain',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);handleFiles(e.dataTransfer.files);}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
