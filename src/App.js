@@ -847,6 +847,7 @@ export default function App() {
   const [extractingMemory,setExtractingMemory]=useState(false);
   const [streamText,setStreamText]=useState('');
   const [isThinking,setIsThinking]=useState(false);
+  const [chunkStatus,setChunkStatus]=useState(''); // mensajes de progreso del modo chunks
   const abortRef=useRef(null);
   const streamTextRef=useRef('');
   const [toolExecutions,setToolExecutions]=useState([]);
@@ -1086,20 +1087,20 @@ export default function App() {
             signal: controller.signal,
             onStream: (delta, isStream) => {
               if(isStream){
+                // Delta real del modelo → va al streamText que se muestra en la burbuja
                 accumulated += delta;
                 streamTextRef.current = accumulated;
                 setStreamText(accumulated);
               } else {
-                // mensajes de progreso
-                accumulated += delta;
-                streamTextRef.current = accumulated;
-                setStreamText(accumulated);
+                // Mensaje de progreso (fase 1, 2, 3) → va al indicador de estado separado
+                setChunkStatus(delta.trim());
               }
             }
           });
           const assistantMsg={role:'assistant',content:finalText,timestamp:Date.now(),model:MODEL_SMART};
           updateConv(cid,c=>({...c,messages:[...c.messages,assistantMsg]}));
           setStreamText(''); streamTextRef.current='';
+          setChunkStatus('');
           setLoading(false); setIsThinking(false);
           return;
       }
@@ -1235,7 +1236,7 @@ export default function App() {
       }
 
       // ── Commit mensaje final ─────────────────────────────────────────────────
-      setStreamText(''); setIsThinking(false);
+      setStreamText(''); setChunkStatus(''); setIsThinking(false);
       const replyTxt = finalText || 'Sin respuesta.';
       const assistantMsg={role:'assistant',content:replyTxt,timestamp:Date.now(),model:chatModel,...(origCode?{originalCode:origCode}:{})};
       updateConv(cid,c=>({...c,messages:[...c.messages,assistantMsg]}));
@@ -1376,7 +1377,15 @@ export default function App() {
               )}
               {activeConv&&messages.length===0&&<div style={{textAlign:'center',paddingTop:'60px'}}><p style={{color:t.muted,fontSize:'14px'}}>Conversación nueva. ¿Arrancamos?</p></div>}
               {messages.map((m,i)=><Bubble key={i} message={m} t={t} onDiff={(o,n)=>{setDiffData({o,n});setModal('diff');}}/>)}
-              {isThinking&&!streamText&&<Thinking t={t}/>}
+              {isThinking&&!streamText&&!chunkStatus&&<Thinking t={t}/>}
+              {chunkStatus&&!streamText&&(
+                <div style={{display:'flex',gap:'10px',marginBottom:'18px',alignItems:'flex-start'}}>
+                  <div style={{width:'36px',height:'36px',borderRadius:'10px',background:t.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0}}>🔥</div>
+                  <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px 16px 16px 4px',padding:'10px 16px',color:t.muted,fontSize:'13px',fontFamily:"'IBM Plex Mono',monospace"}}>
+                    <span style={{marginRight:'8px',animation:'pulse 1s infinite'}}>⟳</span>{chunkStatus}
+                  </div>
+                </div>
+              )}
               {streamText&&<StreamingBubble streamText={streamText} t={t}/>}
               <div ref={bottomRef}/>
             </div>

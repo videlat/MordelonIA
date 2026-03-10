@@ -67,11 +67,11 @@ export const analyzeAndEditLargeFile = async ({
   const totalChunks = chunks.length;
 
   // ── FASE 1: Analizar cada chunk → mapa estructural parcial ────────────────
-  onStream(`🔍 Analizando archivo en ${totalChunks} partes...\n\n`, false);
+  onStream(`🔍 Analizando archivo en ${totalChunks} partes...`, false);
 
   const chunkSummaries = [];
   for (let i = 0; i < chunks.length; i++) {
-    onStream(`📄 Leyendo parte ${i + 1}/${totalChunks}...\n`, false);
+    onStream(`📄 Leyendo parte ${i + 1} de ${totalChunks}...`, false);
 
     const res = await fetchWithRetry(claudeFetch, {
       model: MODEL_SMART,
@@ -100,7 +100,7 @@ export const analyzeAndEditLargeFile = async ({
   }
 
   // ── FASE 2: Consolidar mapa unificado del archivo completo ────────────────
-  onStream(`\n🧠 Consolidando análisis completo...\n`, false);
+  onStream(`🧠 Consolidando mapa del archivo...`, false);
 
   const consolidateRes = await fetchWithRetry(claudeFetch, {
     model: MODEL_SMART,
@@ -126,7 +126,7 @@ export const analyzeAndEditLargeFile = async ({
   const fileMap = consolidateData.content?.[0]?.text || '';
 
   // ── FASE 3: Generar la modificación con contexto completo ─────────────────
-  onStream(`\n✏️ Generando modificación...\n\n`, false);
+  onStream(`✏️ Generando respuesta...`, false);
 
   const historyCtx = history.slice(-4).map(m => ({
     role: m.role,
