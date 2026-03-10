@@ -950,18 +950,6 @@ export default function App() {
     showNotif('Recuerdo eliminado');
   },[]);
 
-  const handleProjectAnalyze=useCallback((project, focus)=>{
-    const id=genId();
-    const title=`🔬 ${project.name}`;
-    const ctx=formatProjectContext(project, focus);
-    const prompt=buildAnalysisPrompt(project, focus);
-    const conv={id,title,messages:[],createdAt:Date.now(),updatedAt:Date.now(),projectContext:ctx};
-    setConvs(prev=>[conv,...prev]);
-    setActiveId(id);
-    showNotif(`🔬 ${project.name} · ${project.stats.codeFiles} archivos cargados`);
-    setTimeout(()=>send(prompt),300);
-  },[]);
-
   const renameConv=useCallback((id,title)=>{
 
     setConvs(prev=>prev.map(c=>{
@@ -1211,6 +1199,18 @@ export default function App() {
         showNotif('Error al conectar','error');
       }
     } finally { setLoading(false); setStreamText(''); setIsThinking(false); streamTextRef.current=''; }
+  };
+
+  // Declarado DESPUÉS de send para evitar referencia antes de inicialización
+  const handleProjectAnalyze = (project, focus) => {
+    const id=genId();
+    const ctx=formatProjectContext(project, focus);
+    const prompt=buildAnalysisPrompt(project, focus);
+    const conv={id,title:`🔬 ${project.name}`,messages:[],createdAt:Date.now(),updatedAt:Date.now(),projectContext:ctx};
+    setConvs(prev=>[conv,...prev]);
+    setActiveId(id);
+    showNotif(`🔬 ${project.name} · ${project.stats.codeFiles} archivos cargados`);
+    setTimeout(()=>send(prompt),300);
   };
 
   if(!ready) return (
