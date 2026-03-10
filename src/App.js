@@ -13,6 +13,44 @@ import {
   formatProjectContext, buildAnalysisPrompt
 } from './projectAnalyzer';
 
+// ─── GROQ FETCH CON RETRY AUTOMÁTICO ─────────────────────────────────────────
+// Maneja rate limit 429: lee retry-after y reintenta automáticamente
+const groqFetch = async (body, signal, onWaiting, maxRetries = 4) => {
+  const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+  const apiKey   = process.env.REACT_APP_GROQ_KEY;
+  let attempt = 0;
+
+  while (attempt <= maxRetries) {
+    const res = await fetch(GROQ_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      signal,
+      body: JSON.stringify(body),
+    });
+
+    if (res.status !== 429) return res; // OK o error no-rate-limit → devolver tal cual
+
+    attempt++;
+    if (attempt > maxRetries) return res; // agotamos reintentos
+
+    // Leer cuántos segundos esperar (Groq lo manda en el header o en el body)
+    let waitSec = parseFloat(res.headers.get('retry-after') || '0');
+    if (!waitSec || isNaN(waitSec)) {
+      try {
+        const errBody = await res.clone().json();
+        // El mensaje suele ser "Please try again in 53.79s"
+        const match = errBody?.error?.message?.match(/try again in ([\d.]+)s/);
+        waitSec = match ? parseFloat(match[1]) : 10 * attempt;
+      } catch { waitSec = 10 * attempt; }
+    }
+    // Pequeño buffer extra para no volver a pegar el límite de inmediato
+    waitSec = Math.ceil(waitSec) + 2;
+
+    if (onWaiting) onWaiting(waitSec, attempt);
+    await new Promise(r => setTimeout(r, waitSec * 1000));
+  }
+};
+
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Sos MordelonIA, una IA personal con personalidad propia — creada específicamente para este usuario.
 
@@ -1033,23 +1071,18 @@ export default function App() {
     try {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
       const apiMsgs=await buildMsgs(current.messages,text,fls);
-      const apiKey=process.env.REACT_APP_GROQ_KEY;
       const memoryBlock=formatMemoriesForPrompt(memories);
       const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
+      const onWaiting=(sec,attempt)=>showNotif(`⏳ Rate limit — reintentando en ${sec}s (intento ${attempt})...`,'info');
 
       // ── PASO 1: llamada sin stream para detectar tool calls ──────────────────
-      const firstRes = await fetch('https://api.groq.com/openai/v1/chat/completions',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-        signal: controller.signal,
-        body:JSON.stringify({
+      const firstRes = await groqFetch({
           model:'llama-3.3-70b-versatile',
           max_tokens:8192,
           tools: TOOL_DEFINITIONS,
           tool_choice: 'auto',
           messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
-        }),
-      });
+        }, controller.signal, onWaiting);
       if(!firstRes.ok){ const e=await firstRes.json(); throw new Error(e.error?.message||`HTTP ${firstRes.status}`); }
       const firstData = await firstRes.json();
       const firstChoice = firstData.choices?.[0];
@@ -1093,17 +1126,12 @@ export default function App() {
           ...toolResults,
         ];
 
-        const streamRes = await fetch('https://api.groq.com/openai/v1/chat/completions',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-          signal: controller.signal,
-          body:JSON.stringify({
+        const streamRes = await groqFetch({
             model:'llama-3.3-70b-versatile',
             max_tokens:8192,
             stream: true,
             messages: secondMsgs,
-          }),
-        });
+          }, controller.signal, onWaiting);
         if(!streamRes.ok){ const e=await streamRes.json(); throw new Error(e.error?.message||`HTTP ${streamRes.status}`); }
 
         const reader = streamRes.body.getReader();
@@ -1128,17 +1156,12 @@ export default function App() {
 
       } else {
         // ── Sin tool calls: streaming normal ─────────────────────────────────
-        const streamRes = await fetch('https://api.groq.com/openai/v1/chat/completions',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-          signal: controller.signal,
-          body:JSON.stringify({
+        const streamRes = await groqFetch({
             model:'llama-3.3-70b-versatile',
             max_tokens:8192,
             stream: true,
             messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
-          }),
-        });
+          }, controller.signal, onWaiting);
         if(!streamRes.ok){ const e=await streamRes.json(); throw new Error(e.error?.message||`HTTP ${streamRes.status}`); }
 
         const reader = streamRes.body.getReader();
