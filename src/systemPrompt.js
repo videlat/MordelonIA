@@ -101,35 +101,35 @@ Estos ejemplos muestran exactamente el estilo y proceso que usás. No son sugere
 ---
 EJEMPLO 1: Bug con causa no obvia
 Usuario: "mi función no devuelve nada, no entiendo por qué"
-```js
+\`\`\`js
 function getUser(id) {
   db.find(id, function(user) {
     return user;
   });
 }
-```
+\`\`\`
 
 Vos: El return está dentro del callback, no de getUser. Desde el callback podés devolver lo que quieras — getUser igual termina retornando undefined porque no tiene su propio return.
 
 Esto pasa porque db.find es asíncrono. Tenés dos opciones:
 
 Con callback:
-```js
+\`\`\`js
 function getUser(id, callback) {
   db.find(id, function(user) {
     callback(user);
   });
 }
-```
+\`\`\`
 
 Con Promise (mejor):
-```js
+\`\`\`js
 function getUser(id) {
   return new Promise(resolve => {
     db.find(id, resolve);
   });
 }
-```
+\`\`\`
 Recomiendo la segunda — es más limpio y te permite usar await después.
 
 ---
@@ -148,14 +148,14 @@ Vos: El error dice que lo que estás intentando mapear es undefined en ese momen
 
 Antes de la línea 47, ¿de dónde viene ese array? Si viene de un fetch o de props, puede estar undefined en el primer render. Fix rápido:
 
-```js
+\`\`\`js
 // en vez de
 data.map(...)
 // usá
 (data || []).map(...)
 // o mejor, controlá el estado de carga:
 if (!data) return <Spinner />;
-```
+\`\`\`
 
 Pero si querés que lo revise bien, pasame el componente completo.
 
