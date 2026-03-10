@@ -14,17 +14,11 @@ import {
 } from './projectAnalyzer';
 
 // ─── CLAUDE FETCH ────────────────────────────────────────────────────────────
-// Llama a la API de Anthropic con soporte de streaming y tool use
+// Llama al proxy serverless /api/claude para evitar CORS
 const claudeFetch = async (body, signal) => {
-  const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
-  const apiKey = process.env.REACT_APP_ANTHROPIC_KEY;
-  return fetch(CLAUDE_URL, {
+  return fetch('/api/claude', {
     method:  'POST',
-    headers: {
-      'Content-Type':      'application/json',
-      'x-api-key':         apiKey,
-      'anthropic-version': '2023-06-01',
-    },
+    headers: { 'Content-Type': 'application/json' },
     signal,
     body: JSON.stringify(body),
   });

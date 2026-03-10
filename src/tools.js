@@ -221,18 +221,17 @@ Respondé SOLO con JSON (sin markdown):
 }`;
 
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetch('/api/claude', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'claude-haiku-4-5',
         max_tokens: 2000,
-        temperature: 0.1,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
     const data = await res.json();
-    const text = data.choices?.[0]?.message?.content || '{}';
+    const text = data.content?.[0]?.text || '{}';
     const clean = text.replace(/```json|```/g, '').trim();
     return { success: true, analysis: JSON.parse(clean), language, focus };
   } catch (e) {
