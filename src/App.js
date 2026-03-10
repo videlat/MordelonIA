@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { saveConversation, loadConversations, deleteConversation as fbDelete } from './firebase';
+import {
+  saveMemory, loadMemories, deleteMemory,
+  extractMemoriesFromConv, formatMemoriesForPrompt,
+  MEMORY_CATEGORIES
+} from './memory';
 
 // ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Sos MordelonIA, una IA personal con personalidad propia — creada específicamente para este usuario.
@@ -367,6 +372,102 @@ function Sidebar({conversations, activeId, onSelect, onNew, onDelete, onRename, 
   );
 }
 
+// ─── MEMORY PANEL ─────────────────────────────────────────────────────────────
+function MemoryPanel({ memories, onDelete, onClose, t }) {
+  const [filter, setFilter] = useState('all');
+  const [editingId, setEditingId] = useState(null);
+  const [editVal, setEditVal] = useState('');
+
+  const filtered = filter === 'all' ? memories : memories.filter(m => m.category === filter);
+
+  const fmtRelative = (ts) => {
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'hace un momento';
+    if (diff < 3600000) return `hace ${Math.floor(diff/60000)}m`;
+    if (diff < 86400000) return `hace ${Math.floor(diff/3600000)}h`;
+    return fmtDate(ts);
+  };
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={onClose}>
+      <div style={{background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px',width:'560px',maxWidth:'95vw',maxHeight:'82vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 24px 60px rgba(0,0,0,0.6)'}} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{padding:'16px 20px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div>
+            <h3 style={{color:t.text,fontFamily:"'Syne',sans-serif",fontSize:'16px',margin:0}}>🧠 Memoria de MordelonIA</h3>
+            <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',margin:'2px 0 0'}}>{memories.length} recuerdos guardados</p>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',color:t.muted,cursor:'pointer',fontSize:'20px'}}>×</button>
+        </div>
+
+        {/* Filtros */}
+        <div style={{padding:'10px 20px',borderBottom:`1px solid ${t.border}`,display:'flex',gap:'6px',flexWrap:'wrap'}}>
+          {[{key:'all',label:'Todos',icon:'📋'},...Object.entries(MEMORY_CATEGORIES).map(([k,v])=>({key:k,label:v.label,icon:v.icon}))].map(f=>(
+            <button key={f.key} onClick={()=>setFilter(f.key)}
+              style={{padding:'3px 10px',borderRadius:'20px',border:`1px solid ${filter===f.key?t.accent:t.border}`,background:filter===f.key?`${t.accent}18`:'none',color:filter===f.key?t.accent:t.muted,fontSize:'11px',cursor:'pointer',fontFamily:'monospace',transition:'all 0.15s'}}>
+              {f.icon} {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Lista */}
+        <div style={{flex:1,overflowY:'auto',padding:'12px 20px'}}>
+          {filtered.length === 0 && (
+            <div style={{textAlign:'center',padding:'40px 0'}}>
+              <p style={{fontSize:'28px',marginBottom:'8px'}}>🧠</p>
+              <p style={{color:t.muted,fontSize:'13px'}}>
+                {memories.length === 0 ? 'Todavía no hay recuerdos. Se van generando automáticamente.' : 'No hay recuerdos en esta categoría.'}
+              </p>
+            </div>
+          )}
+          {filtered.map(mem => {
+            const cat = MEMORY_CATEGORIES[mem.category];
+            return (
+              <div key={mem.id} style={{padding:'10px 14px',borderRadius:'10px',border:`1px solid ${t.border}`,marginBottom:'8px',background:t.bg,display:'flex',gap:'10px',alignItems:'flex-start'}}>
+                <span style={{fontSize:'18px',flexShrink:0,marginTop:'1px'}}>{cat?.icon||'💡'}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  {editingId === mem.id ? (
+                    <input
+                      autoFocus value={editVal}
+                      onChange={e=>setEditVal(e.target.value)}
+                      onBlur={()=>{
+                        if(editVal.trim()) saveMemory({...mem,content:editVal.trim(),updatedAt:Date.now()});
+                        setEditingId(null);
+                      }}
+                      onKeyDown={e=>{
+                        if(e.key==='Enter'){if(editVal.trim())saveMemory({...mem,content:editVal.trim(),updatedAt:Date.now()});setEditingId(null);}
+                        if(e.key==='Escape')setEditingId(null);
+                      }}
+                      style={{width:'100%',background:t.surface,border:`1px solid ${t.accent}`,borderRadius:'6px',color:t.text,fontSize:'13px',padding:'4px 8px',fontFamily:"'IBM Plex Sans',sans-serif",outline:'none',boxSizing:'border-box'}}
+                    />
+                  ) : (
+                    <p style={{color:t.text,fontSize:'13px',margin:0,lineHeight:1.5}}>{mem.content}</p>
+                  )}
+                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px'}}>
+                    <span style={{fontSize:'10px',fontFamily:'monospace',padding:'1px 7px',borderRadius:'10px',background:`${cat?.color||t.accent}18`,color:cat?.color||t.accent,border:`1px solid ${cat?.color||t.accent}33`}}>{cat?.label||mem.category}</span>
+                    <span style={{color:t.muted,fontSize:'10px',fontFamily:'monospace'}}>{fmtRelative(mem.updatedAt)}</span>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:'4px',flexShrink:0}}>
+                  <button onClick={()=>{setEditingId(mem.id);setEditVal(mem.content);}}
+                    style={{background:'none',border:`1px solid ${t.border}`,color:t.muted,cursor:'pointer',fontSize:'11px',padding:'3px 7px',borderRadius:'5px',fontFamily:'monospace'}}>✏️</button>
+                  <button onClick={()=>onDelete(mem.id)}
+                    style={{background:'none',border:`1px solid ${t.border}`,color:'#ff5555',cursor:'pointer',fontSize:'11px',padding:'3px 7px',borderRadius:'5px',fontFamily:'monospace'}}>🗑</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{padding:'12px 20px',borderTop:`1px solid ${t.border}`}}>
+          <p style={{color:t.muted,fontSize:'10px',textAlign:'center',fontFamily:'monospace'}}>Los recuerdos se extraen automáticamente tras cada respuesta · Doble click para editar</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [convs,setConvs]=useState([]);
@@ -382,6 +483,8 @@ export default function App() {
   const [ready,setReady]=useState(false);
   const [drag,setDrag]=useState(false);
   const [fbOk,setFbOk]=useState(false);
+  const [memories,setMemories]=useState([]);
+  const [extractingMemory,setExtractingMemory]=useState(false);
 
   const t=THEMES[themeKey];
   const activeConv=convs.find(c=>c.id===activeId);
@@ -393,9 +496,13 @@ export default function App() {
 
   // LOAD FROM FIREBASE
   useEffect(()=>{
-    loadConversations().then(loaded=>{
+    Promise.all([
+      loadConversations().catch(()=>[]),
+      loadMemories().catch(()=>[]),
+    ]).then(([loaded, mems])=>{
       setFbOk(true);
       if(loaded.length>0){ setConvs(loaded); setActiveId(loaded[0].id); }
+      setMemories(mems);
       setReady(true);
     }).catch(()=>{ setFbOk(false); setReady(true); });
   },[]);
@@ -438,6 +545,12 @@ export default function App() {
     setConvs(prev=>{ const n=prev.filter(c=>c.id!==id); if(activeId===id)setActiveId(n[0]?.id||null); return n; });
     showNotif('Conversación eliminada');
   },[activeId]);
+
+  const handleDeleteMemory=useCallback(async(id)=>{
+    await deleteMemory(id);
+    setMemories(prev=>prev.filter(m=>m.id!==id));
+    showNotif('Recuerdo eliminado');
+  },[]);
 
   const renameConv=useCallback((id,title)=>{
     setConvs(prev=>prev.map(c=>{
@@ -514,19 +627,46 @@ export default function App() {
       const current=convs.find(c=>c.id===cid)||{messages:[]};
       const apiMsgs=await buildMsgs(current.messages,text,fls);
       const apiKey=process.env.REACT_APP_GROQ_KEY;
+
+      // Inyectar memorias en el system prompt
+      const memoryBlock=formatMemoriesForPrompt(memories);
+      const fullSystemPrompt=memoryBlock?`${SYSTEM_PROMPT}\n\n${memoryBlock}`:SYSTEM_PROMPT;
+
       const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
         body:JSON.stringify({
           model:'llama-3.3-70b-versatile',
           max_tokens:8192,
-          messages:[{role:'system',content:SYSTEM_PROMPT},...apiMsgs],
+          messages:[{role:'system',content:fullSystemPrompt},...apiMsgs],
         }),
       });
       const data=await res.json();
       if(data.error) throw new Error(data.error.message);
       const replyTxt=data.choices?.[0]?.message?.content||'Sin respuesta.';
-      updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:replyTxt,timestamp:Date.now(),...(origCode?{originalCode:origCode}:{})}]}));
+      const assistantMsg={role:'assistant',content:replyTxt,timestamp:Date.now(),...(origCode?{originalCode:origCode}:{})};
+      updateConv(cid,c=>({...c,messages:[...c.messages,assistantMsg]}));
+
+      // Extraer memorias en background sin bloquear la UI
+      const updatedMsgs=[...current.messages,userMsg,assistantMsg];
+      setExtractingMemory(true);
+      extractMemoriesFromConv(updatedMsgs, memories, apiKey)
+        .then(async(newMems)=>{
+          if(newMems.length>0){
+            const saved=[];
+            for(const m of newMems){
+              const mem={id:genId(),category:m.category,content:m.content,source_conv_id:cid,createdAt:Date.now(),updatedAt:Date.now()};
+              const ok=await saveMemory(mem);
+              if(ok) saved.push(mem);
+            }
+            if(saved.length>0){
+              setMemories(prev=>[...saved,...prev]);
+              showNotif(`🧠 ${saved.length} recuerdo${saved.length>1?'s':''} nuevo${saved.length>1?'s':''}`);
+            }
+          }
+        })
+        .finally(()=>setExtractingMemory(false));
+
     } catch(err){
       updateConv(cid,c=>({...c,messages:[...c.messages,{role:'assistant',content:`Error: ${err.message}`,timestamp:Date.now()}]}));
       showNotif('Error al conectar','error');
@@ -573,6 +713,7 @@ export default function App() {
             <div style={{display:'flex',gap:'6px',flexShrink:0}}>
               {[
                 {icon:'🔍',title:'Buscar Ctrl+K',fn:()=>setModal('search')},
+                {icon:'🧠',title:`Memoria`,fn:()=>setModal('memory'),label:extractingMemory?'…':memories.length>0?`${memories.length}`:''},
                 {icon:'📤',title:'Exportar Ctrl+E',fn:()=>activeConv&&exportConv(activeConv)},
                 {icon:'🎨',title:'Tema Ctrl+D',fn:cycleTheme,label:t.name},
                 {icon:'⌨️',title:'Atajos',fn:()=>setModal('shortcuts')},
@@ -659,6 +800,7 @@ export default function App() {
       {modal==='search'&&<SearchModal conversations={convs} onSelect={setActiveId} onClose={()=>setModal(null)} t={t}/>}
       {modal==='shortcuts'&&<ShortcutsModal onClose={()=>setModal(null)} t={t}/>}
       {modal==='diff'&&diffData&&<DiffModal original={diffData.o} modified={diffData.n} onClose={()=>setModal(null)} t={t}/>}
+      {modal==='memory'&&<MemoryPanel memories={memories} onDelete={handleDeleteMemory} onClose={()=>setModal(null)} t={t}/>}
       <input ref={fileRef} type='file' multiple accept='.py,.js,.ts,.jsx,.tsx,.html,.css,.java,.cpp,.c,.cs,.go,.rs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.md,.txt,.vue,.svelte,.kt,.swift,.dart,.pdf,.png,.jpg,.jpeg,.gif,.webp' style={{display:'none'}} onChange={e=>handleFiles(e.target.files)}/>
     </>
   );
