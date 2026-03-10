@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { saveConversation, loadConversations, deleteConversation as fbDelete } from './firebase';
+import Mascota from './Mascota';
 import { analyzeAndEditLargeFile, LARGE_FILE_THRESHOLD } from './chunkProcessor';
 import {
   saveMemory, loadMemories, deleteMemory,
@@ -1294,6 +1295,9 @@ export default function App() {
     </div>
   );
 
+  // Estado de la mascota
+  const mascotaState = isThinking ? 'thinking' : streamText ? 'talking' : 'idle';
+
   return (
     <>
       <style>{`
@@ -1441,6 +1445,7 @@ export default function App() {
       {modal==='analyzer'&&<ProjectAnalyzerModal onClose={()=>setModal(null)} onAnalyze={handleProjectAnalyze} t={t}/>}
       {modal==='analyzer'&&<ProjectAnalyzerModal onClose={()=>setModal(null)} onAnalyze={handleProjectAnalyze} t={t}/>}
       <input ref={fileRef} type='file' multiple accept='.py,.js,.ts,.jsx,.tsx,.html,.css,.java,.cpp,.c,.cs,.go,.rs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.md,.txt,.vue,.svelte,.kt,.swift,.dart,.pdf,.png,.jpg,.jpeg,.gif,.webp' style={{display:'none'}} onChange={e=>handleFiles(e.target.files)}/>
+      <Mascota state={mascotaState} accent={t.accent} border={t.border} surface={t.surface}/>
     </>
   );
 }
