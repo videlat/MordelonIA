@@ -13,19 +13,25 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
-// ─── UTILIDAD: elimina undefined recursivamente ───────────────────────────────
-// Firestore tira 400 si algún campo es undefined. Esto lo previene.
-const stripUndefined = (obj) => {
-  if (Array.isArray(obj)) return obj.map(stripUndefined);
-  if (obj !== null && typeof obj === 'object') {
-    return Object.fromEntries(
-      Object.entries(obj)
-        .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [k, stripUndefined(v)])
-    );
-  }
-  return obj;
+// ─── UTILIDAD: serialización segura para Firestore ───────────────────────────
+// Elimina undefined, circular refs, y objetos DOM que no son serializables
+const safeSerialize = (obj, seen = new WeakSet()) => {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  // Detectar circular references y objetos DOM
+  if (seen.has(obj)) return '[circular]';
+  if (typeof window !== 'undefined' && obj instanceof window.Element) return '[DOMElement]';
+  if (typeof window !== 'undefined' && obj instanceof window.Event) return '[Event]';
+  seen.add(obj);
+  if (Array.isArray(obj)) return obj.map(v => safeSerialize(v, seen));
+  return Object.fromEntries(
+    Object.entries(obj)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, safeSerialize(v, seen)])
+  );
 };
+// Alias para compatibilidad
+const stripUndefined = safeSerialize;
 
 // ─── Normaliza el content de un mensaje para Firestore ───────────────────────
 // Soporta: string, array de bloques (vision/multimodal), cualquier otra cosa
