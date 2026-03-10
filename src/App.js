@@ -1078,13 +1078,13 @@ export default function App() {
       const fullSystemPrompt=[SYSTEM_PROMPT, memoryBlock||null].filter(Boolean).join('\n\n');
       const onWaiting=(sec,attempt)=>showNotif(`⏳ Rate limit — reintentando en ${sec}s (intento ${attempt})...`,'info');
 
-      // Modelo dinámico: 8b para chat normal (131k ctx), 70b solo si hay proyecto adjunto
-      const hasProjectCtx = !!(current.projectContext);
-      const chatModel = hasProjectCtx ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+      // Modelo dinámico:
+      // - PASO 1 (detección tools): siempre 70b, es el único que maneja function calling bien
+      // - PASO 3 (respuesta final): 8b si es chat simple, 70b si hay proyecto o usó tools
 
       // ── PASO 1: llamada sin stream para detectar tool calls ──────────────────
       const firstRes = await groqFetch({
-          model: chatModel,
+          model: 'llama-3.3-70b-versatile',
           max_tokens:8192,
           tools: TOOL_DEFINITIONS,
           tool_choice: 'auto',
@@ -1094,6 +1094,10 @@ export default function App() {
       const firstData = await firstRes.json();
       const firstChoice = firstData.choices?.[0];
       const toolCalls = firstChoice?.message?.tool_calls;
+
+      // Modelo para la respuesta final: 70b si usó tools o hay proyecto, 8b si es chat simple
+      const hasProjectCtx = !!(current.projectContext);
+      const chatModel = (toolCalls?.length > 0 || hasProjectCtx) ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
 
       let finalText = '';
 
