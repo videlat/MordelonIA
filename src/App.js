@@ -884,6 +884,7 @@ export default function App() {
   const bottomRef=useRef(null);
   const fileRef=useRef(null);
   const taRef=useRef(null);
+  const scrollRef=useRef(null);
   const saveTimer=useRef({});
 
   // LOAD FROM FIREBASE
@@ -900,6 +901,19 @@ export default function App() {
   },[]);
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); },[messages,loading]);
+
+  // Fix scroll táctil en mobile — listener nativo pasivo en el contenedor de mensajes
+  useEffect(()=>{
+    const el = scrollRef.current;
+    if (!el) return;
+    const prevent = (e) => { e.stopPropagation(); };
+    el.addEventListener('touchstart', prevent, { passive: true });
+    el.addEventListener('touchmove', prevent, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', prevent);
+      el.removeEventListener('touchmove', prevent);
+    };
+  }, []);
 
   const debouncedSave=useCallback((conv)=>{
     clearTimeout(saveTimer.current[conv.id]);
@@ -1400,7 +1414,7 @@ export default function App() {
           {notif&&<div style={{position:'fixed',top:'68px',right:'16px',padding:'10px 16px',background:notif.type==='error'?'#2a0d0d':t.surface,border:`1px solid ${notif.type==='error'?'#ff5555':t.accent}`,borderRadius:'10px',color:notif.type==='error'?'#ff5555':t.accent,fontSize:'12px',zIndex:100,fontFamily:'monospace',animation:'fadeUp 0.2s ease'}}>{notif.msg}</div>}
 
           {/* MESSAGES */}
-          <div style={{flex:1,height:0,overflowY:'auto',WebkitOverflowScrolling:'touch',overscrollBehavior:'contain',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
+          <div ref={scrollRef} style={{flex:1,height:0,overflowY:'auto',WebkitOverflowScrolling:'touch',overscrollBehavior:'contain',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);handleFiles(e.dataTransfer.files);}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
@@ -1492,7 +1506,9 @@ export default function App() {
       {modal==='analyzer'&&<ProjectAnalyzerModal onClose={()=>setModal(null)} onAnalyze={handleProjectAnalyze} t={t}/>}
       {modal==='analyzer'&&<ProjectAnalyzerModal onClose={()=>setModal(null)} onAnalyze={handleProjectAnalyze} t={t}/>}
       <input ref={fileRef} type='file' multiple accept='.py,.js,.ts,.jsx,.tsx,.html,.css,.java,.cpp,.c,.cs,.go,.rs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.md,.txt,.vue,.svelte,.kt,.swift,.dart,.pdf,.png,.jpg,.jpeg,.gif,.webp' style={{display:'none'}} onChange={e=>handleFiles(e.target.files)}/>
-      <Mascota state={mascotaState} accent={t.accent} border={t.border} surface={t.surface}/>
+      <div style={{pointerEvents: isMobile ? 'none' : 'auto'}}>
+        <Mascota state={mascotaState} accent={t.accent} border={t.border} surface={t.surface}/>
+      </div>
     </>
   );
 }

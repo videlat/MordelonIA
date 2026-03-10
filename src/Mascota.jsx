@@ -413,7 +413,7 @@ export default function Mascota({ state='idle', surface='#0a1929', border='#1e2d
     const up = () => setDragging(false);
     window.addEventListener('mousemove', mv);
     window.addEventListener('mouseup',   up);
-    window.addEventListener('touchmove', mv, { passive:true });
+    window.addEventListener('touchmove', mv, { passive: false });
     window.addEventListener('touchend',  up);
     return () => {
       window.removeEventListener('mousemove', mv);
@@ -451,7 +451,7 @@ export default function Mascota({ state='idle', surface='#0a1929', border='#1e2d
       style={{
         position:'fixed', left:pos.x, top:pos.y, zIndex:9999,
         cursor: dragging ? 'grabbing' : 'grab',
-        userSelect:'none', touchAction:'none',
+        userSelect:'none', touchAction: dragging ? 'none' : 'pan-y',
         display:'flex', flexDirection:'column', alignItems:'center', gap:'4px',
       }}
     >
