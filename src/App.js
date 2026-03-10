@@ -368,7 +368,7 @@ function ShortcutsModal({onClose, t}) {
 }
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function Sidebar({conversations, activeId, onSelect, onNew, onDelete, onRename, isOpen, t}) {
+function Sidebar({conversations, activeId, onSelect, onNew, onDelete, onRename, isOpen, t, isMobile}) {
   const [renaming,setRenaming]=useState(null);
   const [renameVal,setRenameVal]=useState('');
   const grouped=useMemo(()=>{
@@ -386,7 +386,17 @@ function Sidebar({conversations, activeId, onSelect, onNew, onDelete, onRename, 
     return g;
   },[conversations]);
   return (
-    <div style={{width:isOpen?'260px':'0px',minWidth:isOpen?'260px':'0px',background:t.bg,borderRight:`1px solid ${t.border}`,display:'flex',flexDirection:'column',overflow:'hidden',transition:'all 0.3s ease',flexShrink:0}}>
+    <div style={{
+      width: isMobile ? '260px' : (isOpen ? '260px' : '0px'),
+      minWidth: isMobile ? '260px' : (isOpen ? '260px' : '0px'),
+      background:t.bg,
+      borderRight:`1px solid ${t.border}`,
+      display:'flex',flexDirection:'column',
+      overflow:'hidden',
+      transition: isMobile ? 'transform 0.3s ease' : 'all 0.3s ease',
+      flexShrink:0,
+      transform: isMobile ? (isOpen ? 'translateX(0)' : 'translateX(-260px)') : 'none'
+    }}>
       <div style={{padding:'16px 12px 12px',borderBottom:`1px solid ${t.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px',padding:'0 4px'}}>
           <span style={{fontSize:'20px'}}>🔥</span>
@@ -1335,7 +1345,7 @@ export default function App() {
           <div onClick={()=>setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:10,backdropFilter:'blur(2px)'}}/>
         )}
         <div style={{position: isMobile ? 'fixed' : 'relative', top:0, left:0, height:'100%', zIndex: isMobile ? 20 : 'auto'}}>
-          <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t}/>
+          <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t} isMobile={isMobile}/>
         </div>
 
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
