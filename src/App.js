@@ -902,16 +902,25 @@ export default function App() {
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); },[messages,loading]);
 
-  // Fix scroll táctil en mobile — listener nativo pasivo en el contenedor de mensajes
+  // Scroll táctil manual — necesario porque la mascota tiene touchAction:none globalmente
   useEffect(()=>{
     const el = scrollRef.current;
     if (!el) return;
-    const prevent = (e) => { e.stopPropagation(); };
-    el.addEventListener('touchstart', prevent, { passive: true });
-    el.addEventListener('touchmove', prevent, { passive: true });
+    let startY = 0;
+    let startScroll = 0;
+    const onTouchStart = (e) => {
+      startY = e.touches[0].clientY;
+      startScroll = el.scrollTop;
+    };
+    const onTouchMove = (e) => {
+      const dy = startY - e.touches[0].clientY;
+      el.scrollTop = startScroll + dy;
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove',  onTouchMove,  { passive: true });
     return () => {
-      el.removeEventListener('touchstart', prevent);
-      el.removeEventListener('touchmove', prevent);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove',  onTouchMove);
     };
   }, []);
 
