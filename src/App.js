@@ -1362,7 +1362,7 @@ export default function App() {
             }}>▶</button>
         )}
 
-        <div style={{position: isMobile ? 'fixed' : 'relative', top:0, left:0, height:'100%', zIndex: isMobile ? 20 : 'auto'}}>
+        <div style={{position: isMobile ? 'fixed' : 'relative', top:0, left:0, height:'100%', zIndex: isMobile ? 20 : 'auto', pointerEvents: isMobile && !sidebarOpen ? 'none' : 'auto'}}>
           <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t} isMobile={isMobile}/>
         </div>
 
