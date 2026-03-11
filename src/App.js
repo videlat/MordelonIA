@@ -665,7 +665,7 @@ function ToolResultCard({ execution, t }) {
 function ToolsPanel({ executions, isOpen, onClose, t }) {
   const virtualFiles = getVirtualFiles();
   return (
-    <div style={{width:isOpen?'320px':'0px',minWidth:isOpen?'320px':'0px',background:t.bg,borderLeft:`1px solid ${t.border}`,display:'flex',flexDirection:'column',overflow:'hidden',transition:'all 0.3s ease',flexShrink:0}}>
+    <div style={{width:isOpen?'320px':'0px',minWidth:isOpen?'320px':'0px',background:t.bg,borderLeft:`1px solid ${t.border}`,display:'flex',flexDirection:'column',overflow:'hidden',transition:'all 0.3s ease',flexShrink:0,pointerEvents:isOpen?'auto':'none'}}>
       <div style={{padding:'14px 16px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div>
           <h3 style={{color:t.text,fontFamily:"'Syne',sans-serif",fontSize:'14px',margin:0}}>⚙️ Herramientas</h3>
