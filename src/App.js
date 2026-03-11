@@ -1353,11 +1353,14 @@ export default function App() {
         @keyframes flamePulse{0%,100%{filter:drop-shadow(0 0 10px ${t.accent}) drop-shadow(0 0 20px ${t.accent2||t.accent})}50%{filter:drop-shadow(0 0 20px ${t.accent}) drop-shadow(0 0 40px ${t.accent2||t.accent})}}
         @keyframes gradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
         @keyframes shimmer{0%{opacity:0.5}50%{opacity:1}100%{opacity:0.5}}
+        html{height:100%;overflow:hidden}
+        body{height:100%;overflow:hidden;background:${t.bg}}
         textarea:focus,input:focus{outline:none}
         textarea::placeholder,input::placeholder{color:${t.muted}}
         ::-webkit-scrollbar{width:4px}
         ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:${t.border};border-radius:2px}
+        ::-webkit-scrollbar-thumb{background:${t.accent}44;border-radius:4px}
+        ::-webkit-scrollbar-thumb:hover{background:${t.accent}88}
       `}</style>
 
       <div style={{display:'flex',height:'100dvh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden',position:'relative'}}>
@@ -1387,25 +1390,29 @@ export default function App() {
 
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0,minHeight:0}}>
           {/* HEADER */}
-          <div style={{padding: isMobile ? '10px 12px' : '10px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:`${t.bg}ee`,backdropFilter:'blur(12px)',flexShrink:0,boxShadow:`0 1px 20px rgba(0,0,0,0.3)`}}>
-            {!isMobile && <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>}
-            <div style={{fontSize: isMobile ? '22px' : '28px',animation:'flamePulse 2s infinite'}}>🔥</div>
+          <div style={{padding: isMobile ? '10px 12px' : '12px 20px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '12px',background:`linear-gradient(90deg, ${t.bg} 0%, ${t.surface} 50%, ${t.bg} 100%)`,flexShrink:0,boxShadow:`0 2px 24px rgba(0,0,0,0.4), inset 0 -1px 0 ${t.accent}22`}}>
+            {!isMobile && <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:`${t.accent}18`,border:`1px solid ${t.accent}44`,color:t.accent,width:'34px',height:'34px',borderRadius:'10px',cursor:'pointer',fontSize:'14px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s',boxShadow:`0 0 12px ${t.accent}33`}}
+              onMouseEnter={e=>{e.currentTarget.style.background=`${t.accent}33`;e.currentTarget.style.boxShadow=`0 0 20px ${t.accent}55`;}}
+              onMouseLeave={e=>{e.currentTarget.style.background=`${t.accent}18`;e.currentTarget.style.boxShadow=`0 0 12px ${t.accent}33`;}}>{sidebarOpen?'◀':'▶'}</button>}
+            <div style={{fontSize: isMobile ? '24px' : '30px',animation:'flamePulse 2s infinite',filter:`drop-shadow(0 0 8px ${t.accent})`}}>🔥</div>
             <div style={{flex:1,minWidth:0}}>
-              <h1 style={{color:t.text,fontSize: isMobile ? '14px' : '17px',fontWeight:800,fontFamily:"'Syne',sans-serif",letterSpacing:'-0.03em',background:t.grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MordelonIA</h1>
-              {!isMobile && <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeConv?`${activeConv.title} · ${activeConv.messages.length} mensajes`:'Seleccioná o creá una conversación'}</p>}
+              <h1 style={{fontSize: isMobile ? '15px' : '18px',fontWeight:900,fontFamily:"'Syne',sans-serif",letterSpacing:'-0.03em',background:t.grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',lineHeight:1}}>MordelonIA</h1>
+              {!isMobile && <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:'2px'}}>{activeConv?`${activeConv.title} · ${activeConv.messages.length} mensajes`:'Seleccioná o creá una conversación'}</p>}
             </div>
-            <div style={{display:'flex',gap: isMobile ? '4px' : '6px',flexShrink:0}}>
+            <div style={{display:'flex',gap: isMobile ? '4px' : '6px',flexShrink:0,alignItems:'center'}}>
               {[
                 {icon:'🔍',title:'Buscar Ctrl+K',fn:()=>setModal('search'), mobileShow: true},
                 {icon:'🧠',title:'Memoria',fn:()=>setModal('memory'),label:extractingMemory?'…':memories.length>0?`${memories.length}`:'', mobileShow: false},
                 {icon:'⚙️',title:'Herramientas',fn:()=>setToolsPanelOpen(v=>!v),label:toolExecutions.length>0?`${toolExecutions.length}`:'', mobileShow: false},
                 {icon:'🔬',title:'Analizar proyecto',fn:()=>setModal('analyzer'),label:activeConv?.projectContext?'activo':'', mobileShow: false},
                 {icon:'📤',title:'Exportar Ctrl+E',fn:()=>activeConv&&exportConv(activeConv), mobileShow: false},
-                {icon:'🎨',title:'Tema Ctrl+D',fn:cycleTheme,label:isMobile?'':t.name, mobileShow: true},
+                {icon:'🎨',title:'Tema',fn:cycleTheme,label:isMobile?'':t.name, mobileShow: true},
                 {icon:'⌨️',title:'Atajos',fn:()=>setModal('shortcuts'), mobileShow: false},
               ].filter(b => !isMobile || b.mobileShow).map((b,i)=>(
-                <button key={i} onClick={b.fn} title={b.title} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,padding: isMobile ? '5px 8px' : '5px 10px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontFamily:'monospace',display:'flex',alignItems:'center',gap:'4px',whiteSpace:'nowrap',transition:'border-color 0.2s'}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=`${t.accent}88`} onMouseLeave={e=>e.currentTarget.style.borderColor=t.border}>
+                <button key={i} onClick={b.fn} title={b.title}
+                  style={{background:`${t.accent}12`,border:`1px solid ${t.accent}33`,color:t.accent,padding: isMobile ? '6px 8px' : '5px 11px',borderRadius:'10px',cursor:'pointer',fontSize:'12px',fontFamily:'monospace',display:'flex',alignItems:'center',gap:'4px',whiteSpace:'nowrap',transition:'all 0.2s'}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=`${t.accent}28`;e.currentTarget.style.borderColor=`${t.accent}66`;e.currentTarget.style.boxShadow=`0 0 14px ${t.accent}33`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=`${t.accent}12`;e.currentTarget.style.borderColor=`${t.accent}33`;e.currentTarget.style.boxShadow='none';}}>
                   {b.icon}{b.label?` ${b.label}`:''}
                 </button>
               ))}
@@ -1420,7 +1427,7 @@ export default function App() {
           {notif&&<div style={{position:'fixed',top:'68px',right:'16px',padding:'10px 16px',background:notif.type==='error'?'#2a0d0d':t.surface,border:`1px solid ${notif.type==='error'?'#ff5555':t.accent}`,borderRadius:'10px',color:notif.type==='error'?'#ff5555':t.accent,fontSize:'12px',zIndex:100,fontFamily:'monospace',animation:'fadeUp 0.2s ease'}}>{notif.msg}</div>}
 
           {/* MESSAGES */}
-          <div ref={scrollRef} style={{flex:1,minHeight:0,overflowY:'scroll',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
+          <div ref={scrollRef} style={{flex:1,minHeight:0,overflowY:'scroll',touchAction:'pan-y',padding: isMobile ? '16px 10px' : '24px 20px',background:`radial-gradient(ellipse at 20% 20%, ${t.accent}08 0%, transparent 60%), radial-gradient(ellipse at 80% 80%, ${t.accent2||t.accent}06 0%, transparent 60%), ${t.bg}`,transition:'background 0.2s',border:drag?`2px dashed ${t.accent}66`:'2px dashed transparent'}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);handleFiles(e.dataTransfer.files);}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
@@ -1468,7 +1475,7 @@ export default function App() {
           </div>
 
           {/* INPUT */}
-          <div style={{padding: isMobile ? '8px 10px 14px' : '10px 18px 18px',borderTop:`1px solid ${t.border}`,background:t.bg,flexShrink:0}}>
+          <div style={{padding: isMobile ? '10px 12px 16px' : '12px 20px 20px',borderTop:`1px solid ${t.accent}33`,background:`linear-gradient(0deg, ${t.surface} 0%, ${t.bg} 100%)`,flexShrink:0,boxShadow:`0 -4px 24px rgba(0,0,0,0.3)`}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
               {files.length>0&&(
                 <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'8px'}}>
