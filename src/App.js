@@ -1465,7 +1465,7 @@ export default function App() {
                   style={{flex:1,background:'none',border:'none',color:t.text,fontSize:'14px',fontFamily:"'IBM Plex Sans',sans-serif",resize:'none',lineHeight:'1.6',minHeight:'24px',maxHeight:'180px',overflowY:'auto'}}
                   onInput={e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,180)+'px';}}/>
                 <button
-                  onClick={loading ? stopStream : send}
+                  onClick={()=>{ loading ? stopStream() : send(); }}
                   disabled={!loading&&(!input.trim()&&!files.length)}
                   style={{width:'34px',height:'34px',borderRadius:'9px',border:'none',flexShrink:0,
                     background: loading ? '#ff444488' : (!input.trim()&&!files.length) ? t.border : t.grad,
