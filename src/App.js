@@ -902,28 +902,6 @@ export default function App() {
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); },[messages,loading]);
 
-  // Scroll táctil manual — necesario porque la mascota tiene touchAction:none globalmente
-  useEffect(()=>{
-    const el = scrollRef.current;
-    if (!el) return;
-    let startY = 0;
-    let startScroll = 0;
-    const onTouchStart = (e) => {
-      startY = e.touches[0].clientY;
-      startScroll = el.scrollTop;
-    };
-    const onTouchMove = (e) => {
-      const dy = startY - e.touches[0].clientY;
-      el.scrollTop = startScroll + dy;
-    };
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove',  onTouchMove,  { passive: true });
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove',  onTouchMove);
-    };
-  }, []);
-
   const debouncedSave=useCallback((conv)=>{
     clearTimeout(saveTimer.current[conv.id]);
     saveTimer.current[conv.id]=setTimeout(()=>saveConversation(conv),1500);
@@ -1349,8 +1327,8 @@ export default function App() {
     <>
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
-        html,body{height:100%;overflow:hidden}
-        body{background:${t.bg};overflow:hidden;-webkit-overflow-scrolling:touch}
+        html{height:100%;overflow:hidden}
+        body{height:100%;overflow:hidden;background:${t.bg}}
         @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
@@ -1363,7 +1341,7 @@ export default function App() {
         ::-webkit-scrollbar-thumb{background:${t.border};border-radius:2px}
       `}</style>
 
-      <div style={{display:'flex',height:'100dvh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'clip',position:'relative'}}>
+      <div style={{display:'flex',height:'100dvh',background:t.bg,fontFamily:"'IBM Plex Sans',sans-serif",overflow:'hidden',position:'relative'}}>
         {/* Overlay mobile: toca afuera del sidebar para cerrarlo */}
         {isMobile && sidebarOpen && (
           <div onClick={()=>setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:10,backdropFilter:'blur(2px)'}}/>
@@ -1388,7 +1366,7 @@ export default function App() {
           <Sidebar conversations={convs} activeId={activeId} onSelect={(id)=>{setActiveId(id);setToolExecutions([]);if(isMobile)setSidebarOpen(false);}} onNew={()=>{newConv();if(isMobile)setSidebarOpen(false);}} onDelete={deleteConv} onRename={renameConv} isOpen={sidebarOpen} t={t} isMobile={isMobile}/>
         </div>
 
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'clip',minWidth:0,minHeight:0,height:'100dvh'}}>
+        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0,minHeight:0}}>
           {/* HEADER */}
           <div style={{padding: isMobile ? '10px 12px' : '12px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:t.bg,flexShrink:0}}>
             {!isMobile && <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>}
@@ -1423,7 +1401,7 @@ export default function App() {
           {notif&&<div style={{position:'fixed',top:'68px',right:'16px',padding:'10px 16px',background:notif.type==='error'?'#2a0d0d':t.surface,border:`1px solid ${notif.type==='error'?'#ff5555':t.accent}`,borderRadius:'10px',color:notif.type==='error'?'#ff5555':t.accent,fontSize:'12px',zIndex:100,fontFamily:'monospace',animation:'fadeUp 0.2s ease'}}>{notif.msg}</div>}
 
           {/* MESSAGES */}
-          <div ref={scrollRef} style={{flex:1,height:0,overflowY:'auto',WebkitOverflowScrolling:'touch',overscrollBehavior:'contain',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
+          <div ref={scrollRef} style={{flex:1,minHeight:0,overflowY:'scroll',touchAction:'pan-y',padding: isMobile ? '12px 10px' : '20px 18px',background:drag?`${t.accent}08`:'transparent',transition:'background 0.2s',border:drag?`2px dashed ${t.accent}44`:'2px dashed transparent'}}
             onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
             onDrop={e=>{e.preventDefault();setDrag(false);handleFiles(e.dataTransfer.files);}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
