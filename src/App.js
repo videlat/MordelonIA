@@ -61,10 +61,10 @@ import { SYSTEM_PROMPT } from './systemPrompt';
 
 // ─── THEMES ───────────────────────────────────────────────────────────────────
 const THEMES = {
-  dark:    { name:'Oscuro',   bg:'#040e1a', surface:'#0a1929', border:'#1e2d3d', text:'#cdd9e5', muted:'#2a4a6a', accent:'#ff6b00', grad:'linear-gradient(135deg,#ff6b00,#ff9500)', ub:'#1a1000', ubr:'#3a2200' },
-  midnight:{ name:'Midnight', bg:'#080408', surface:'#100a10', border:'#1e121e', text:'#e0c8e0', muted:'#4a2a4a', accent:'#cc44ff', grad:'linear-gradient(135deg,#cc44ff,#ff44cc)', ub:'#180a18', ubr:'#3a1a3a' },
-  matrix:  { name:'Matrix',   bg:'#020d04', surface:'#071209', border:'#0d2e10', text:'#88ff99', muted:'#1a4a1e', accent:'#00cc44', grad:'linear-gradient(135deg,#00cc44,#00ff88)', ub:'#062210', ubr:'#0a4a1e' },
-  ember:   { name:'Ember',    bg:'#0d0400', surface:'#160800', border:'#2e1000', text:'#ffd0a0', muted:'#4a2000', accent:'#ff4400', grad:'linear-gradient(135deg,#ff4400,#ff8800)', ub:'#1a0800', ubr:'#3a1400' },
+  dark:    { name:'Oscuro',   bg:'#08090f', surface:'#11141f', border:'#1f2640', text:'#e2e8f8', muted:'#4a5580', accent:'#ff6b35', accent2:'#ff9500', grad:'linear-gradient(135deg,#ff6b35,#ff9500,#ffcc00)', gradShort:'linear-gradient(135deg,#ff6b35,#ff9500)', ub:'#1a120a', ubr:'#ff6b3533', userGrad:'linear-gradient(135deg,#ff6b35,#ff9500)' },
+  midnight:{ name:'Midnight', bg:'#07050f', surface:'#0f0a1a', border:'#1e1535', text:'#e8d8ff', muted:'#5a3a8a', accent:'#a855f7', accent2:'#ec4899', grad:'linear-gradient(135deg,#a855f7,#ec4899,#f97316)', gradShort:'linear-gradient(135deg,#a855f7,#ec4899)', ub:'#150a20', ubr:'#a855f733', userGrad:'linear-gradient(135deg,#a855f7,#ec4899)' },
+  matrix:  { name:'Matrix',   bg:'#030a05', surface:'#060f08', border:'#0d2e14', text:'#a0ffb0', muted:'#1a5a28', accent:'#00e676', accent2:'#69ff47', grad:'linear-gradient(135deg,#00e676,#69ff47,#00bcd4)', gradShort:'linear-gradient(135deg,#00e676,#69ff47)', ub:'#041508', ubr:'#00e67633', userGrad:'linear-gradient(135deg,#00e676,#69ff47)' },
+  ember:   { name:'Ember',    bg:'#0f0500', surface:'#180900', border:'#3a1500', text:'#ffe8cc', muted:'#6a2800', accent:'#ff4500', accent2:'#ff8c00', grad:'linear-gradient(135deg,#ff4500,#ff8c00,#ffd700)', gradShort:'linear-gradient(135deg,#ff4500,#ff8c00)', ub:'#200800', ubr:'#ff450033', userGrad:'linear-gradient(135deg,#ff4500,#ff8c00)' },
 };
 
 const SHORTCUTS = [
@@ -108,12 +108,16 @@ function CodeBlock({code, language, t}) {
     URL.revokeObjectURL(u);
   };
   return (
-    <div style={{margin:'10px 0',borderRadius:'10px',overflow:'hidden',border:`1px solid ${t.border}`}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 14px',background:t.bg,borderBottom:`1px solid ${t.border}`}}>
-        <span style={{color:t.accent,fontSize:'11px',fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.08em'}}>{language||'code'}</span>
+    <div style={{margin:'12px 0',borderRadius:'14px',overflow:'hidden',border:`1px solid ${t.border}`,boxShadow:`0 4px 24px rgba(0,0,0,0.4)`}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 14px',background:`linear-gradient(90deg,${t.bg},${t.surface})`,borderBottom:`1px solid ${t.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+          <div style={{display:'flex',gap:'5px'}}>{['#ff5f57','#febc2e','#28c840'].map((c,i)=><div key={i} style={{width:'10px',height:'10px',borderRadius:'50%',background:c}}/>)}</div>
+          <span style={{color:t.accent,fontSize:'11px',fontFamily:'monospace',textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700}}>{language||'code'}</span>
+        </div>
         <div style={{display:'flex',gap:'6px'}}>
-          <button onClick={download} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,padding:'2px 10px',borderRadius:'4px',cursor:'pointer',fontSize:'11px',fontFamily:'monospace'}}>↓ bajar</button>
-          <button onClick={copy} style={{background:'none',border:`1px solid ${t.border}`,color:copied?'#50fa7b':t.accent,padding:'2px 10px',borderRadius:'4px',cursor:'pointer',fontSize:'11px',fontFamily:'monospace',transition:'color 0.2s'}}>{copied?'✓ copiado':'copiar'}</button>
+          <button onClick={download} style={{background:`${t.accent}18`,border:`1px solid ${t.accent}44`,color:t.accent,padding:'3px 10px',borderRadius:'6px',cursor:'pointer',fontSize:'11px',fontFamily:'monospace',transition:'all 0.2s'}}
+            onMouseEnter={e=>e.currentTarget.style.background=`${t.accent}30`} onMouseLeave={e=>e.currentTarget.style.background=`${t.accent}18`}>↓ bajar</button>
+          <button onClick={copy} style={{background:copied?'#00e67618':'none',border:`1px solid ${copied?'#00e676':t.border}`,color:copied?'#00e676':t.accent,padding:'3px 10px',borderRadius:'6px',cursor:'pointer',fontSize:'11px',fontFamily:'monospace',transition:'all 0.2s'}}>{copied?'✓ copiado':'copiar'}</button>
         </div>
       </div>
       <pre style={{margin:0,padding:'16px',background:t.bg,overflowX:'auto',fontSize:'13px',lineHeight:'1.65',color:t.text,fontFamily:"'Fira Code','Cascadia Code','Consolas',monospace"}}>
@@ -181,9 +185,9 @@ function Bubble({message, t, onDiff, isMobile}) {
   const parts=parseMsgContent(txt);
   const codes=parts.filter(p=>p.type==='code');
   return (
-    <div style={{display:'flex',justifyContent:isUser?'flex-end':'flex-start',marginBottom:'18px',gap:'10px',alignItems:'flex-start',animation:'fadeUp 0.25s ease'}}>
+    <div style={{display:'flex',justifyContent:isUser?'flex-end':'flex-start',marginBottom:'20px',gap:'10px',alignItems:'flex-start',animation:'fadeUp 0.25s ease'}}>
       {!isUser&&(
-        <div style={{width: isMobile?'30px':'36px',height:isMobile?'30px':'36px',borderRadius:'10px',background:t.grad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isMobile?'16px':'18px',flexShrink:0,boxShadow:`0 0 16px ${t.accent}55`}}>🔥</div>
+        <div style={{width:isMobile?'30px':'36px',height:isMobile?'30px':'36px',borderRadius:'12px',background:t.gradShort,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isMobile?'16px':'18px',flexShrink:0,boxShadow:`0 4px 16px ${t.accent}55`}}>🔥</div>
       )}
       <div style={{maxWidth: isMobile ? '90%' : '78%'}}>
         {message.attachments?.length>0&&(
@@ -191,25 +195,31 @@ function Bubble({message, t, onDiff, isMobile}) {
             {message.attachments.map((a,i)=><FileBadge key={i} file={a} t={t}/>)}
           </div>
         )}
-        <div style={{background:isUser?t.ub:t.surface,border:`1px solid ${isUser?t.ubr:t.border}`,borderRadius:isUser?'16px 16px 4px 16px':'16px 16px 16px 4px',padding: isMobile ? '10px 12px' : '12px 16px'}}>
+        <div style={{
+          background: isUser ? t.userGrad : t.surface,
+          border: isUser ? 'none' : `1px solid ${t.border}`,
+          borderRadius:isUser?'18px 18px 4px 18px':'18px 18px 18px 4px',
+          padding: isMobile ? '10px 14px' : '12px 18px',
+          boxShadow: isUser ? `0 4px 20px ${t.accent}40` : `0 2px 12px rgba(0,0,0,0.3)`,
+        }}>
           {parts.map((p,i)=>p.type==='code'
             ?<CodeBlock key={i} code={p.content} language={p.language} t={t}/>
-            :<p key={i} style={{margin:0,color:t.text,fontSize: isMobile ? '13px' : '14px',lineHeight:'1.7',whiteSpace:'pre-wrap',fontFamily:"'IBM Plex Sans',sans-serif"}}>{p.content}</p>
+            :<p key={i} style={{margin:0,color:isUser?'#fff':t.text,fontSize:isMobile?'13px':'14px',lineHeight:'1.7',whiteSpace:'pre-wrap',fontFamily:"'IBM Plex Sans',sans-serif"}}>{p.content}</p>
           )}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'4px',justifyContent:isUser?'flex-end':'flex-start'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',marginTop:'5px',justifyContent:isUser?'flex-end':'flex-start'}}>
           <span style={{fontSize:'10px',color:t.muted,fontFamily:'monospace'}}>{fmtDate(message.timestamp||Date.now())}</span>
           {!isUser&&message.model&&(
-            <span style={{fontSize:'9px',fontFamily:'monospace',padding:'1px 6px',borderRadius:'4px',border:`1px solid ${t.border}`,color:message.model.includes('sonnet')?'#cc44ff':t.accent,background:message.model.includes('sonnet')?'#1a0a2a':'transparent'}}>
+            <span style={{fontSize:'9px',fontFamily:'monospace',padding:'2px 7px',borderRadius:'20px',background:message.model.includes('sonnet')?`${t.accent2}22`:`${t.accent}18`,border:`1px solid ${message.model.includes('sonnet')?t.accent2:t.accent}44`,color:message.model.includes('sonnet')?t.accent2:t.accent}}>
               {message.model.includes('sonnet')?'✦ Sonnet':'◆ Haiku'}
             </span>
           )}
           {!isUser&&codes.length>0&&message.originalCode&&(
-            <button onClick={()=>onDiff(message.originalCode,codes[0].content)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,fontSize:'10px',padding:'1px 8px',borderRadius:'4px',cursor:'pointer',fontFamily:'monospace'}}>ver diff</button>
+            <button onClick={()=>onDiff(message.originalCode,codes[0].content)} style={{background:`${t.accent}15`,border:`1px solid ${t.accent}44`,color:t.accent,fontSize:'10px',padding:'2px 8px',borderRadius:'20px',cursor:'pointer',fontFamily:'monospace'}}>ver diff</button>
           )}
         </div>
       </div>
-      {isUser&&<div style={{width:isMobile?'30px':'36px',height:isMobile?'30px':'36px',borderRadius:'10px',background:t.ub,border:`1px solid ${t.ubr}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isMobile?'14px':'16px',flexShrink:0}}>👤</div>}
+      {isUser&&<div style={{width:isMobile?'30px':'36px',height:isMobile?'30px':'36px',borderRadius:'12px',background:t.userGrad,display:'flex',alignItems:'center',justifyContent:'center',fontSize:isMobile?'14px':'16px',flexShrink:0,boxShadow:`0 4px 12px ${t.accent}44`}}>👤</div>}
     </div>
   );
 }
@@ -389,7 +399,7 @@ function Sidebar({conversations, activeId, onSelect, onNew, onDelete, onRename, 
     <div style={{
       width: isMobile ? '260px' : (isOpen ? '260px' : '0px'),
       minWidth: isMobile ? '260px' : (isOpen ? '260px' : '0px'),
-      background:t.bg,
+      background: `linear-gradient(180deg, ${t.surface} 0%, ${t.bg} 100%)`,
       borderRight:`1px solid ${t.border}`,
       display:'flex',flexDirection:'column',
       overflow:'hidden',
@@ -397,13 +407,16 @@ function Sidebar({conversations, activeId, onSelect, onNew, onDelete, onRename, 
       flexShrink:0,
       transform: isMobile ? (isOpen ? 'translateX(0)' : 'translateX(-260px)') : 'none'
     }}>
-      <div style={{padding:'16px 12px 12px',borderBottom:`1px solid ${t.border}`}}>
-        <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px',padding:'0 4px'}}>
-          <span style={{fontSize:'20px'}}>🔥</span>
-          <span style={{color:t.accent,fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:'15px',letterSpacing:'-0.02em'}}>MordelonIA</span>
+      <div style={{padding:'18px 14px 14px',borderBottom:`1px solid ${t.border}`,background:`${t.accent}08`}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'14px',padding:'0 4px'}}>
+          <div style={{width:'32px',height:'32px',borderRadius:'10px',background:t.gradShort,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'16px',boxShadow:`0 4px 12px ${t.accent}44`}}>🔥</div>
+          <div>
+            <span style={{color:t.text,fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:'15px',letterSpacing:'-0.02em',background:t.gradShort,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MordelonIA</span>
+            <p style={{color:t.muted,fontSize:'9px',fontFamily:'monospace',margin:0,letterSpacing:'0.05em'}}>IA · código · social</p>
+          </div>
         </div>
-        <button onClick={onNew} style={{width:'100%',padding:'9px',background:`${t.accent}18`,border:`1px solid ${t.accent}33`,borderRadius:'10px',color:t.accent,cursor:'pointer',fontSize:'13px',fontFamily:"'IBM Plex Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',transition:'all 0.2s'}}
-          onMouseEnter={e=>e.currentTarget.style.background=`${t.accent}28`} onMouseLeave={e=>e.currentTarget.style.background=`${t.accent}18`}>
+        <button onClick={onNew} style={{width:'100%',padding:'10px',background:t.gradShort,border:'none',borderRadius:'12px',color:'#fff',cursor:'pointer',fontSize:'13px',fontFamily:"'IBM Plex Sans',sans-serif",display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',fontWeight:600,boxShadow:`0 4px 16px ${t.accent}44`,transition:'all 0.2s'}}
+          onMouseEnter={e=>e.currentTarget.style.opacity='0.85'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
           + Nueva conversación
         </button>
       </div>
@@ -421,11 +434,15 @@ function Sidebar({conversations, activeId, onSelect, onNew, onDelete, onRename, 
                     style={{width:'100%',padding:'8px 10px',background:t.surface,border:`1px solid ${t.accent}`,borderRadius:'8px',color:t.text,fontSize:'12px',fontFamily:"'IBM Plex Sans',sans-serif",outline:'none',boxSizing:'border-box'}}/>
                 ):(
                   <div onClick={()=>onSelect(conv.id)} onDoubleClick={()=>{setRenaming(conv.id);setRenameVal(conv.title);}}
-                    style={{padding:'9px 10px',borderRadius:'8px',cursor:'pointer',marginBottom:'2px',background:activeId===conv.id?t.surface:'transparent',border:`1px solid ${activeId===conv.id?t.border:'transparent'}`,transition:'all 0.15s',display:'flex',justifyContent:'space-between',alignItems:'center'}}
-                    onMouseEnter={e=>{if(activeId!==conv.id)e.currentTarget.style.background=`${t.accent}08`;e.currentTarget.querySelector('.dbtn').style.opacity='1';}}
-                    onMouseLeave={e=>{if(activeId!==conv.id)e.currentTarget.style.background='transparent';e.currentTarget.querySelector('.dbtn').style.opacity='0';}}>
+                    style={{padding:'9px 10px',borderRadius:'10px',cursor:'pointer',marginBottom:'3px',
+                      background:activeId===conv.id?`${t.accent}18`:'transparent',
+                      border:`1px solid ${activeId===conv.id?t.accent+'44':'transparent'}`,
+                      transition:'all 0.15s',display:'flex',justifyContent:'space-between',alignItems:'center',
+                      boxShadow: activeId===conv.id ? `0 2px 12px ${t.accent}22` : 'none'}}
+                    onMouseEnter={e=>{if(activeId!==conv.id){e.currentTarget.style.background=`${t.accent}0a`;e.currentTarget.style.borderColor=`${t.accent}22`;}e.currentTarget.querySelector('.dbtn').style.opacity='1';}}
+                    onMouseLeave={e=>{if(activeId!==conv.id){e.currentTarget.style.background='transparent';e.currentTarget.style.borderColor='transparent';}e.currentTarget.querySelector('.dbtn').style.opacity='0';}}>
                     <div style={{flex:1,overflow:'hidden'}}>
-                      <p style={{color:activeId===conv.id?t.accent:t.text,fontSize:'12px',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontFamily:"'IBM Plex Sans',sans-serif"}}>{conv.title||'Sin título'}</p>
+                      <p style={{color:activeId===conv.id?t.accent:t.text,fontSize:'12px',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontFamily:"'IBM Plex Sans',sans-serif",fontWeight:activeId===conv.id?600:400}}>{conv.title||'Sin título'}</p>
                       <p style={{color:t.muted,fontSize:'10px',margin:'2px 0 0',fontFamily:'monospace'}}>{fmtDate(conv.updatedAt)} · {conv.messages?.length||0} msgs</p>
                     </div>
                     <button className='dbtn' onClick={e=>{e.stopPropagation();onDelete(conv.id);}} style={{background:'none',border:'none',color:'#ff5555',cursor:'pointer',fontSize:'13px',padding:'2px 4px',opacity:0,transition:'opacity 0.2s',flexShrink:0}}>🗑</button>
@@ -1330,10 +1347,12 @@ export default function App() {
         html{height:100%;overflow:hidden}
         body{height:100%;overflow:hidden;background:${t.bg}}
         @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse{0%,100%{opacity:0.5}50%{opacity:1}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes flamePulse{0%,100%{filter:drop-shadow(0 0 8px #ff6b00) drop-shadow(0 0 16px #ff9500)}50%{filter:drop-shadow(0 0 16px #ff4400) drop-shadow(0 0 32px #ff8800)}}
+        @keyframes flamePulse{0%,100%{filter:drop-shadow(0 0 10px ${t.accent}) drop-shadow(0 0 20px ${t.accent2||t.accent})}50%{filter:drop-shadow(0 0 20px ${t.accent}) drop-shadow(0 0 40px ${t.accent2||t.accent})}}
+        @keyframes gradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+        @keyframes shimmer{0%{opacity:0.5}50%{opacity:1}100%{opacity:0.5}}
         textarea:focus,input:focus{outline:none}
         textarea::placeholder,input::placeholder{color:${t.muted}}
         ::-webkit-scrollbar{width:4px}
@@ -1368,7 +1387,7 @@ export default function App() {
 
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0,minHeight:0}}>
           {/* HEADER */}
-          <div style={{padding: isMobile ? '10px 12px' : '12px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:t.bg,flexShrink:0}}>
+          <div style={{padding: isMobile ? '10px 12px' : '10px 18px',borderBottom:`1px solid ${t.border}`,display:'flex',alignItems:'center',gap: isMobile ? '8px' : '10px',background:`${t.bg}ee`,backdropFilter:'blur(12px)',flexShrink:0,boxShadow:`0 1px 20px rgba(0,0,0,0.3)`}}>
             {!isMobile && <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:`1px solid ${t.border}`,color:t.accent,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'12px',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>{sidebarOpen?'◀':'▶'}</button>}
             <div style={{fontSize: isMobile ? '22px' : '28px',animation:'flamePulse 2s infinite'}}>🔥</div>
             <div style={{flex:1,minWidth:0}}>
@@ -1406,25 +1425,30 @@ export default function App() {
             onDrop={e=>{e.preventDefault();setDrag(false);handleFiles(e.dataTransfer.files);}}>
             <div style={{maxWidth:'860px',margin:'0 auto'}}>
               {!activeConv&&(
-                <div style={{textAlign:'center',paddingTop:'40px',animation:'fadeUp 0.4s ease'}}>
-                  <div style={{fontSize:'60px',marginBottom:'16px',animation:'flamePulse 2s infinite'}}>🔥</div>
-                  <h2 style={{fontSize:'32px',fontWeight:800,fontFamily:"'Syne',sans-serif",letterSpacing:'-0.04em',marginBottom:'8px',background:t.grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>MordelonIA</h2>
-                  <p style={{color:t.muted,fontSize:'14px',marginBottom:'10px'}}>Programación y redes sociales. Sin rodeos, sin límites.</p>
-                  <div style={{display:'flex',gap:'6px',justifyContent:'center',flexWrap:'wrap',marginBottom:'36px'}}>
-                    {['código','archivos','PDFs','imágenes','Instagram','sin límites'].map(tag=>(
-                      <span key={tag} style={{padding:'3px 10px',background:`${t.accent}14`,border:`1px solid ${t.accent}33`,borderRadius:'20px',color:t.accent,fontSize:'11px',fontFamily:'monospace'}}>{tag}</span>
+                <div style={{textAlign:'center',paddingTop: isMobile?'30px':'60px',animation:'fadeUp 0.4s ease'}}>
+                  {/* Glow de fondo */}
+                  <div style={{position:'relative',display:'inline-block',marginBottom:'20px'}}>
+                    <div style={{position:'absolute',inset:'-20px',background:t.gradShort,borderRadius:'50%',filter:'blur(40px)',opacity:0.25,animation:'flamePulse 3s infinite'}}/>
+                    <div style={{fontSize: isMobile?'64px':'80px',animation:'flamePulse 2s infinite',position:'relative'}}>🔥</div>
+                  </div>
+                  <h2 style={{fontSize: isMobile?'28px':'42px',fontWeight:900,fontFamily:"'Syne',sans-serif",letterSpacing:'-0.04em',marginBottom:'10px',background:t.grad,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',lineHeight:1.1}}>MordelonIA</h2>
+                  <p style={{color:t.muted,fontSize: isMobile?'13px':'15px',marginBottom:'24px',letterSpacing:'0.01em'}}>Programación y redes sociales. Sin rodeos, sin límites.</p>
+                  <div style={{display:'flex',gap:'8px',justifyContent:'center',flexWrap:'wrap',marginBottom:'32px'}}>
+                    {['código','archivos','PDFs','imágenes','Instagram','sin límites'].map((tag,i)=>(
+                      <span key={tag} style={{padding:'4px 12px',background:`linear-gradient(135deg,${t.accent}20,${t.accent2||t.accent}15)`,border:`1px solid ${t.accent}44`,borderRadius:'20px',color:t.accent,fontSize:'11px',fontFamily:'monospace',fontWeight:600}}>{tag}</span>
                     ))}
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',gap:'10px',maxWidth:'580px',margin:'0 auto'}}>
+                  <div style={{display:'grid',gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',gap:'10px',maxWidth:'560px',margin:'0 auto 32px'}}>
                     {SUGGESTIONS.map((s,i)=>(
-                      <button key={i} onClick={()=>{const id=newConv();setTimeout(()=>send(s.text),50);}} style={{background:t.surface,border:`1px solid ${t.border}`,color:t.text,padding:'12px 14px',borderRadius:'10px',cursor:'pointer',fontSize:'12px',textAlign:'left',transition:'all 0.2s',lineHeight:1.4,fontFamily:"'IBM Plex Sans',sans-serif"}}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=`${t.accent}55`;e.currentTarget.style.color=t.accent;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.text;}}>
-                        <span style={{marginRight:'6px'}}>{s.icon}</span>{s.text}
+                      <button key={i} onClick={()=>{const id=newConv();setTimeout(()=>send(s.text),50);}}
+                        style={{background:t.surface,border:`1px solid ${t.border}`,color:t.text,padding:'14px 16px',borderRadius:'14px',cursor:'pointer',fontSize:'12px',textAlign:'left',transition:'all 0.2s',lineHeight:1.5,fontFamily:"'IBM Plex Sans',sans-serif",boxShadow:`0 2px 8px rgba(0,0,0,0.2)`}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=`${t.accent}66`;e.currentTarget.style.background=`${t.accent}0d`;e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=`0 8px 24px ${t.accent}22`;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.background=t.surface;e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.2)';}}>
+                        <span style={{marginRight:'8px',fontSize:'16px'}}>{s.icon}</span><span style={{fontWeight:500}}>{s.text}</span>
                       </button>
                     ))}
                   </div>
-                  <p style={{color:t.muted,fontSize:'11px',marginTop:'28px',fontFamily:'monospace'}}>💡 Arrastrá archivos · Doble click para renombrar · Ctrl+K para buscar</p>
+                  {!isMobile && <p style={{color:t.muted,fontSize:'11px',fontFamily:'monospace',opacity:0.6}}>💡 Arrastrá archivos · Doble click para renombrar · Ctrl+K para buscar</p>}
                 </div>
               )}
               {activeConv&&messages.length===0&&<div style={{textAlign:'center',paddingTop:'60px'}}><p style={{color:t.muted,fontSize:'14px'}}>Conversación nueva. ¿Arrancamos?</p></div>}
@@ -1451,9 +1475,9 @@ export default function App() {
                   {files.map((f,i)=><FileBadge key={i} file={f} t={t} onRemove={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}/>)}
                 </div>
               )}
-              <div style={{display:'flex',gap:'8px',alignItems:'flex-end',background:t.surface,border:`1px solid ${t.border}`,borderRadius:'14px',padding:'10px 12px',transition:'border-color 0.2s'}}
-                onFocus={e=>e.currentTarget.style.borderColor=`${t.accent}55`}
-                onBlur={e=>e.currentTarget.style.borderColor=t.border}>
+              <div style={{display:'flex',gap:'8px',alignItems:'flex-end',background:t.surface,border:`1px solid ${t.border}`,borderRadius:'16px',padding:'10px 12px',transition:'all 0.25s',boxShadow:`0 2px 12px rgba(0,0,0,0.2)`}}
+                onFocus={e=>{ e.currentTarget.style.borderColor=`${t.accent}88`; e.currentTarget.style.boxShadow=`0 0 0 3px ${t.accent}20, 0 4px 20px rgba(0,0,0,0.3)`; }}
+                onBlur={e=>{ e.currentTarget.style.borderColor=t.border; e.currentTarget.style.boxShadow=`0 2px 12px rgba(0,0,0,0.2)`; }}>
                 <button onClick={()=>fileRef.current?.click()} title='Subir archivo' style={{background:'none',border:`1px solid ${t.border}`,color:t.muted,width:'32px',height:'32px',borderRadius:'8px',cursor:'pointer',fontSize:'15px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.2s'}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=`${t.accent}55`;e.currentTarget.style.color=t.accent;}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=t.border;e.currentTarget.style.color=t.muted;}}>📎</button>
@@ -1467,12 +1491,14 @@ export default function App() {
                 <button
                   onClick={()=>{ loading ? stopStream() : send(); }}
                   disabled={!loading&&(!input.trim()&&!files.length)}
-                  style={{width:'34px',height:'34px',borderRadius:'9px',border:'none',flexShrink:0,
-                    background: loading ? '#ff444488' : (!input.trim()&&!files.length) ? t.border : t.grad,
+                  style={{width:'36px',height:'36px',borderRadius:'12px',border:'none',flexShrink:0,
+                    background: loading ? '#ff444499' : (!input.trim()&&!files.length) ? t.border : t.gradShort,
                     cursor: (!loading&&!input.trim()&&!files.length) ? 'not-allowed' : 'pointer',
-                    color:'#fff',fontSize:'15px',display:'flex',alignItems:'center',justifyContent:'center',
-                    boxShadow: loading ? '0 0 14px #ff444466' : (!input.trim()&&!files.length) ? 'none' : `0 0 14px ${t.accent}66`,
-                    transition:'all 0.2s',border: loading ? '1px solid #ff444466' : 'none'}}>
+                    color:'#fff',fontSize:'16px',display:'flex',alignItems:'center',justifyContent:'center',
+                    boxShadow: loading ? '0 0 16px #ff444466' : (!input.trim()&&!files.length) ? 'none' : `0 4px 16px ${t.accent}66`,
+                    transition:'all 0.2s',transform: (!loading&&(!input.trim()&&!files.length)) ? 'none' : 'scale(1)'}}
+                  onMouseEnter={e=>{ if(!(!loading&&(!input.trim()&&!files.length))) e.currentTarget.style.transform='scale(1.08)'; }}
+                  onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'}>
                   {loading
                     ? <span style={{fontSize:'12px',fontWeight:'bold'}}>⏹</span>
                     : '→'}
